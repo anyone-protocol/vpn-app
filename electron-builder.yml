@@ -1,0 +1,44 @@
+appId: io.anyone.AnyoneDesktop
+productName: Anyone Vpn
+copyright: Copyright © 2025 Malibu
+afterSign: scripts/notarize.js
+forceCodeSigning: true
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - from: .
+    filter:
+      - package.json
+      - app
+asarUnpack:
+      - node_modules/@anyone-protocol/anyone-client/bin
+publish:
+  provider: spaces
+  name: anyoneDesktop-updates
+  region: ams3
+  acl: public-read
+mac:
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+  target:
+    - target: default
+      arch: universal
+
+# Add Windows configuration
+win:
+  target:
+    - nsis # Generates a Windows installer (.exe)
+    - portable # Generates a portable .exe file
+  icon: resources/icon.ico # Path to your Windows app icon
+
+nsis:
+  oneClick: false # Show an installation wizard
+  perMachine: true # Install for all users
+  allowToChangeInstallationDirectory: true # Let users change the install path
+
+protocols:
+  name: Anyone Vpn

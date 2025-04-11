@@ -1,0 +1,21 @@
+# dependencies
+node_modules
+
+# logs
+*.log
+
+# next.js
+.next
+next-env.d.ts
+yarn.lock
+
+# build
+/app
+dist
+terms-agreement
+
+Certificates.p12
+package-mac-signed.sh
+.env
+certificate.txt
+scripts/notarize.js
