@@ -11,6 +11,9 @@ import {
   DrawerCloseButton,
   Button,
   useDisclosure,
+  VStack,
+  HStack,
+  Select,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import { TbCopy, TbCopyCheck } from "react-icons/tb";
@@ -23,6 +26,8 @@ import { SlArrowRight } from "react-icons/sl";
 import { SlArrowLeft } from "react-icons/sl";
 import { PortComponent } from "./PortComponent";
 import { SettingsComponent } from "./SettingsComponent";
+import { RuleBox, Rule } from "./RuleBox";
+
 interface IPCardProps {
   label: string;
   value: string;
@@ -31,6 +36,25 @@ interface IPCardProps {
   headerBgColor: string;
   status: string;
 }
+
+const mockRules: Rule[] = [
+  {
+    id: '1',
+    title: 'Default Rule',
+    destinations: ['https://pornhub.com', 'and 7 more'],
+    hops: 3,
+    entryCountries: ['All'],
+    exitCountries: ['All'],
+  },
+  {
+    id: '2',
+    title: 'Social Media Rule',
+    destinations: ['https://facebook.com', 'and 3 more'],
+    hops: 2,
+    entryCountries: ['US', 'UK', 'CA'],
+    exitCountries: ['FR', 'DE', 'NL'],
+  },
+];
 
 const IPCard: React.FC<IPCardProps> = ({
   label,
@@ -50,10 +74,14 @@ const IPCard: React.FC<IPCardProps> = ({
     setIsExpanded,
   } = useAppContext();
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { 
+    isOpen: isSettingsOpen, 
+    onOpen: onSettingsOpen, 
+    onClose: onSettingsClose 
+  } = useDisclosure();
 
   const [isCopied, setIsCopied] = useState(false);
   const [newPort, setNewPort] = useState(proxyPort);
-
   const [newAnyonePort, setNewAnyonePort] = useState(anyonePort);
 
   const handleCopy = () => {
@@ -66,34 +94,12 @@ const IPCard: React.FC<IPCardProps> = ({
     }, 2000);
   };
 
-  // const handlePortChange = () => {
-  //   if (!proxyRunning) {
-  //     window.ipc.changeProxyPort(newPort);
-  //     onClose();
-  //   }
-  // };
-
   const handleAnyonePortChange = () => {
     if (!proxyRunning) {
       window.ipc.changeAnonPort(newAnyonePort);
       onClose();
     }
   };
-
-  // onExpandClick={() => {
-  //   if (window.ipc) {
-  //     window.ipc.expandApp();
-  //     console.log("Expanding App");
-  //   }
-  //   setIsExpanded(!isExpanded);
-  // }}
-  // onMinimizeClick={() => {
-  //   if (window.ipc) {
-  //     window.ipc.minimizeExpandedApp();
-  //     console.log("Minimizing App");
-  //   }
-  //   setIsExpanded(!isExpanded);
-  // }}
 
   const handleExpandClick = () => {
     if (window.ipc) {
@@ -167,20 +173,25 @@ const IPCard: React.FC<IPCardProps> = ({
           )}
         </Box>
 
-        <Button size="sm" onClick={onOpen} ml={2} colorScheme="">
-          <IoInformationCircleOutline color={menuTextColor} />
-        </Button>
+        <Flex gap={2}>
+          <Button size="sm" onClick={onOpen} colorScheme="">
+            <IoInformationCircleOutline color={menuTextColor} />
+          </Button>
 
-        {/* expand and minimize buttons */}
-        {expanded ? (
-          <Button size="sm" onClick={handleMinimizeClick} ml={2} colorScheme="">
-            <SlArrowLeft color={menuTextColor} />
+          <Button size="sm" onClick={onSettingsOpen} colorScheme="">
+            <FiSettings color={menuTextColor} />
           </Button>
-        ) : (
-          <Button size="sm" onClick={handleExpandClick} ml={2} colorScheme="">
-            <SlArrowRight color={menuTextColor} />
-          </Button>
-        )}
+
+          {expanded ? (
+            <Button size="sm" onClick={handleMinimizeClick} colorScheme="">
+              <SlArrowLeft color={menuTextColor} />
+            </Button>
+          ) : (
+            <Button size="sm" onClick={handleExpandClick} colorScheme="">
+              <SlArrowRight color={menuTextColor} />
+            </Button>
+          )}
+        </Flex>
       </Flex>
 
       {/* Drawer for Real IP and Proxy Port */}
@@ -224,25 +235,49 @@ const IPCard: React.FC<IPCardProps> = ({
               </Text>
               <Text fontSize="sm">{realIP}</Text>
             </Flex>
-            {/* <PortComponent
-              headerBgColor={headerBgColor}
-              newPort={newPort}
-              portName="Proxy Port"
-              proxyRunning={proxyRunning}
-              isLoading={isLoading}
-              setNewPort={setNewPort}
-              handlePortChange={handlePortChange}
-            /> */}
-            {/* <PortComponent
-              headerBgColor={headerBgColor}
-              newPort={newAnyonePort}
-              portName="Anyone Port"
-              proxyRunning={proxyRunning}
-              isLoading={isLoading}
-              setNewPort={setNewAnyonePort}
-              handlePortChange={handleAnyonePortChange}
-            /> */}
             <SettingsComponent headerBgColor={headerBgColor} />
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
+
+      {/* New Settings Drawer */}
+      <Drawer isOpen={isSettingsOpen} placement="right" onClose={onSettingsClose} size="md">
+        <DrawerOverlay />
+        <DrawerContent
+          style={{
+            background: "rgba(24, 24, 27, 0.50)",
+            boxShadow: "0px 1px 0px 0px rgba(255, 255, 255, 0.08) inset",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <DrawerCloseButton />
+          <DrawerHeader>Rules Settings</DrawerHeader>
+          <DrawerBody
+            bg={"rgba(24, 24, 27, 0.90"}
+            boxShadow={"0px 1px 0px 0px rgba(255, 255, 255, 0.08) inset"}
+          >
+            <VStack spacing={4} align="stretch">
+              <Button
+                variant="outline"
+                borderColor={headerBgColor}
+                bg="transparent"
+                color={headerBgColor}
+                _hover={{ 
+                  color: "white",
+                  boxShadow: `0 0 10px ${headerBgColor}, 0 0 10px ${headerBgColor}, 0 0 10px ${headerBgColor}`
+                }}
+                size="md"
+                onClick={() => {
+                  console.log("Add rules clicked");
+                }}
+              >
+                Add New Rule
+              </Button>
+
+              {mockRules.map((rule) => (
+                <RuleBox key={rule.id} rule={rule} headerBgColor={headerBgColor} />
+              ))}
+            </VStack>
           </DrawerBody>
         </DrawerContent>
       </Drawer>
