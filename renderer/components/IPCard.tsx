@@ -27,6 +27,7 @@ import { SlArrowLeft } from "react-icons/sl";
 import { PortComponent } from "./PortComponent";
 import { SettingsComponent } from "./SettingsComponent";
 import { RuleBox, Rule } from "./RuleBox";
+import { NewRuleBox } from "./NewRuleBox";
 
 interface IPCardProps {
   label: string;
@@ -79,10 +80,16 @@ const IPCard: React.FC<IPCardProps> = ({
     onOpen: onSettingsOpen, 
     onClose: onSettingsClose 
   } = useDisclosure();
+  const {
+    isOpen: isAddRuleOpen,
+    onOpen: onAddRuleOpen,
+    onClose: onAddRuleClose
+  } = useDisclosure();
 
   const [isCopied, setIsCopied] = useState(false);
   const [newPort, setNewPort] = useState(proxyPort);
   const [newAnyonePort, setNewAnyonePort] = useState(anyonePort);
+  const [rules, setRules] = useState<Rule[]>(mockRules);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(value);
@@ -115,6 +122,14 @@ const IPCard: React.FC<IPCardProps> = ({
       console.log("Minimizing App");
     }
     setIsExpanded(!expanded);
+  };
+
+  const handleAddRule = (newRule: Omit<Rule, "id">) => {
+    const rule: Rule = {
+      ...newRule,
+      id: Date.now().toString(), // Simple way to generate unique IDs
+    };
+    setRules([...rules, rule]);
   };
 
   return (
@@ -267,20 +282,25 @@ const IPCard: React.FC<IPCardProps> = ({
                   boxShadow: `0 0 10px ${headerBgColor}, 0 0 10px ${headerBgColor}, 0 0 10px ${headerBgColor}`
                 }}
                 size="md"
-                onClick={() => {
-                  console.log("Add rules clicked");
-                }}
+                onClick={onAddRuleOpen}
               >
                 Add New Rule
               </Button>
 
-              {mockRules.map((rule) => (
+              {rules.map((rule) => (
                 <RuleBox key={rule.id} rule={rule} headerBgColor={headerBgColor} />
               ))}
             </VStack>
           </DrawerBody>
         </DrawerContent>
       </Drawer>
+
+      <NewRuleBox
+        isOpen={isAddRuleOpen}
+        onClose={onAddRuleClose}
+        headerBgColor={headerBgColor}
+        onAddRule={handleAddRule}
+      />
     </>
   );
 };
