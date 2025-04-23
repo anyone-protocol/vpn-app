@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { FingerPrintData } from "../../main/utils";
 import { RelayData } from "../../main/state";
-
+import { ProxyRule } from "../../main/proxy";
 interface LocationData {
   latitude: number;
   longitude: number;
@@ -38,6 +38,10 @@ interface AppContextType {
   anyonePort: number;
   relayData: RelayData | null;
   numberOfRelays: number;
+  proxyRules: ProxyRule[];
+  handleAddProxyRule: (rule: Omit<ProxyRule, 'id'>) => void;
+  handleEditProxyRule: (rule: ProxyRule) => void;
+  handleDeleteProxyRule: (ruleId: string) => void;
   windowSize: { width: number; height: number };
   screenSize: { width: number; height: number };
 }
@@ -100,7 +104,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     width: 0,
     height: 0,
   });
-
+  const [proxyRules, setProxyRules] = useState<ProxyRule[]>([]);
   const [numberOfRelays, setNumberOfRelays] = useState<number>(0);
 
   const windowSizeRef = useRef(windowSize);
@@ -121,6 +125,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
       setRealIP(realIp);
       const realLoc = await window.ipc.getGeolocation(realIp);
       setRealLocation(realLoc);
+
+
+      const proxyRules = await window.ipc.getProxyRules();
+      setProxyRules(proxyRules);
+      console.log(proxyRules, "proxyRules");
 
       // proxy is running
       if (proxyState) {
@@ -375,6 +384,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
     await window.ipc.stopProxy();
   };
 
+  const handleAddProxyRule = async (rule: Omit<ProxyRule, 'id'>) => {
+    setIsLoading(true);
+    if (!window.ipc) {
+      console.error("IPC not available");
+      setIsLoading(false);
+      return;
+    }
+    await window.ipc.addNewProxyRule(rule);
+    const proxyRules = await window.ipc.getProxyRules();
+    setProxyRules(proxyRules);
+    setIsLoading(false);
+  };
+
+  const handleEditProxyRule = async (rule: ProxyRule) => {
+    setIsLoading(true);
+    if (!window.ipc) {
+      console.error("IPC not available");
+      setIsLoading(false);
+      return;
+    }
+    await window.ipc.editProxyRule(rule);
+    const proxyRules = await window.ipc.getProxyRules();
+    setProxyRules(proxyRules);
+    setIsLoading(false);
+  };
+
+  const handleDeleteProxyRule = async (ruleId: string) => {
+    setIsLoading(true);
+    if (!window.ipc) {
+      console.error("IPC not available");
+      setIsLoading(false);
+      return;
+    }
+    await window.ipc.deleteProxyRule(ruleId);
+    const proxyRules = await window.ipc.getProxyRules();
+    setProxyRules(proxyRules);
+    setIsLoading(false);
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -399,6 +447,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         relayLocationData,
         windowSize,
         screenSize,
+        proxyRules,
+        handleAddProxyRule,
+        handleEditProxyRule,
+        handleDeleteProxyRule,
       }}
     >
       {children}

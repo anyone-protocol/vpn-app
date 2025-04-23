@@ -16,6 +16,15 @@ import { ipcMain } from "electron";
 import { getFingerPrintData } from "./utils";
 import { RelayData } from "./state";
 
+export interface ProxyRule {
+    id: string;
+    title: string;
+    destinations: string[];
+    hops: number;
+    entryCountries: string[];
+    exitCountries: string[];
+}
+
 export async function startAnyoneProxy() {
   if (state.anon) {
     console.log("Anyone proxy is already running.");
@@ -191,3 +200,6 @@ export async function stopAnyoneProxy() {
     state.anonSocksClient = null;
   }
 }
+// export async function addNewProxyRule(rule: string) {
+  
+// }

@@ -3,6 +3,7 @@ import { ProcessInfo } from "./utils/getConnectedProcesses";
 import { hideSettingsWindow } from "./windows";
 import { RelayData } from "./state";
 import { FingerPrintData } from "./utils";
+import { ProxyRule } from "./proxy";
 
 const handler = {
   send(channel: string, value: unknown) {
@@ -178,6 +179,10 @@ const handler = {
     };
   },
   getScreenSize: () => ipcRenderer.invoke("get-screen-size"),
+  addNewProxyRule: (rule: Omit<ProxyRule, 'id'>) => ipcRenderer.invoke("add-proxy-rule", rule),
+  editProxyRule: (rule: ProxyRule) => ipcRenderer.invoke("edit-proxy-rule", rule),
+  deleteProxyRule: (ruleId: string) => ipcRenderer.invoke("delete-proxy-rule", ruleId),
+  getProxyRules: () => ipcRenderer.invoke("get-proxy-rules"),
 };
 
 contextBridge.exposeInMainWorld("ipc", handler);

@@ -19,9 +19,11 @@ export interface Rule {
 interface RuleBoxProps {
   rule: Rule;
   headerBgColor: string;
+  deleteProxyRule: (ruleId: string) => void;
+  editProxyRule: (rule: Rule) => void;
 }
 
-export const RuleBox: React.FC<RuleBoxProps> = ({ rule, headerBgColor }) => {
+export const RuleBox: React.FC<RuleBoxProps> = ({ rule, headerBgColor, deleteProxyRule, editProxyRule }) => {
   return (
     <Box
       border="1px solid"
@@ -37,10 +39,10 @@ export const RuleBox: React.FC<RuleBoxProps> = ({ rule, headerBgColor }) => {
           {rule.title}
         </Text>
         <HStack spacing={2}>
-          <Button size="sm" colorScheme="blue" variant="ghost">
+          <Button size="sm" colorScheme="blue" variant="ghost" onClick={() => editProxyRule(rule)}>
             Edit
           </Button>
-          <Button size="sm" colorScheme="red" variant="ghost">
+          <Button size="sm" colorScheme="red" variant="ghost" onClick={() => deleteProxyRule(rule.id)}>
             Delete
           </Button>
         </HStack>

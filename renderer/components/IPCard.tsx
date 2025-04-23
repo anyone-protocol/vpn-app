@@ -73,6 +73,10 @@ const IPCard: React.FC<IPCardProps> = ({
     anyonePort,
     isExpanded: expanded,
     setIsExpanded,
+    proxyRules,
+    handleAddProxyRule,
+    handleDeleteProxyRule,
+    handleEditProxyRule,
   } = useAppContext();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { 
@@ -89,7 +93,6 @@ const IPCard: React.FC<IPCardProps> = ({
   const [isCopied, setIsCopied] = useState(false);
   const [newPort, setNewPort] = useState(proxyPort);
   const [newAnyonePort, setNewAnyonePort] = useState(anyonePort);
-  const [rules, setRules] = useState<Rule[]>(mockRules);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(value);
@@ -122,14 +125,6 @@ const IPCard: React.FC<IPCardProps> = ({
       console.log("Minimizing App");
     }
     setIsExpanded(!expanded);
-  };
-
-  const handleAddRule = (newRule: Omit<Rule, "id">) => {
-    const rule: Rule = {
-      ...newRule,
-      id: Date.now().toString(), // Simple way to generate unique IDs
-    };
-    setRules([...rules, rule]);
   };
 
   return (
@@ -287,8 +282,8 @@ const IPCard: React.FC<IPCardProps> = ({
                 Add New Rule
               </Button>
 
-              {rules.map((rule) => (
-                <RuleBox key={rule.id} rule={rule} headerBgColor={headerBgColor} />
+              {proxyRules.map((rule) => (
+                <RuleBox key={rule.id} rule={rule} headerBgColor={headerBgColor} deleteProxyRule={handleDeleteProxyRule} editProxyRule={handleEditProxyRule} />
               ))}
             </VStack>
           </DrawerBody>
@@ -299,7 +294,7 @@ const IPCard: React.FC<IPCardProps> = ({
         isOpen={isAddRuleOpen}
         onClose={onAddRuleClose}
         headerBgColor={headerBgColor}
-        onAddRule={handleAddRule}
+        onAddRule={handleAddProxyRule}
       />
     </>
   );
