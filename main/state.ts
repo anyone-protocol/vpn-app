@@ -1,9 +1,9 @@
 // src/main/state.ts
 import { BrowserWindow, Menu, Tray } from "electron";
 import {
-  Anon,
-  AnonSocksClient,
-  AnonControlClient,
+  Process,
+  Socks,
+  Control,
 } from "@anyone-protocol/anyone-client";
 import { exePath } from "./constants";
 import { FingerPrintData } from "./utils";
@@ -29,9 +29,9 @@ interface AppState {
   tray: Menubar;
   isQuitting: boolean;
   isProxyRunning: boolean;
-  anon: Anon | null;
-  anonSocksClient: AnonSocksClient | null;
-  anonControlClient: AnonControlClient | null;
+  anon: Process | null;
+  anonSocksClient: Socks | null;
+  anonControlClient: Control | null;
   proxyPort: number;
   anonPort: number;
   anonControlPort: number;

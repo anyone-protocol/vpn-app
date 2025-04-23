@@ -1,8 +1,8 @@
 // src/main/proxy.ts
 import {
-  Anon,
-  AnonSocksClient,
-  AnonControlClient,
+  Process,
+  Socks,
+  Control,
 } from "@anyone-protocol/anyone-client";
 import {
   startProxy as startPrivoxy,
@@ -46,7 +46,7 @@ export async function startAnyoneProxy() {
 
     console.log("connecting with anyone port: ", state.anonPort);
 
-    state.anon = new Anon({
+    state.anon = new Process({
       displayLog: true,
       // socksPort: state.anonPort,
       // controlPort: state.anonControlPort,
@@ -57,7 +57,7 @@ export async function startAnyoneProxy() {
     state.anonPort = state.anon.getSOCKSPort();
     state.anonControlPort = state.anon.getControlPort();
 
-    state.anonSocksClient = new AnonSocksClient(state.anon);
+    state.anonSocksClient = new Socks(state.anon);
 
     await state.anon.start();
     console.log("Anyone proxy started.");
@@ -68,7 +68,7 @@ export async function startAnyoneProxy() {
 
     await new Promise((resolve) => setTimeout(resolve, 1500));
     try {
-      state.anonControlClient = new AnonControlClient();
+      state.anonControlClient = new Control();
     } catch (error: any) {
       console.error("Error creating Anyone control client:", error);
       state.mainWindow?.webContents.send(
