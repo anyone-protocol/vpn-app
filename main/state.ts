@@ -23,6 +23,16 @@ export interface FingerprintData {
   coordinates: { longitude: number; latitude: number };
 }
 
+// TODO: Maybe redundant, double check
+export interface ProxyRuleConfig {
+  routings: {
+    targetAddress: string;
+    hops: number;
+    entryCountries: string[];
+    exitCountries: string[];
+  }[];
+}
+
 interface AppState {
   mainWindow: BrowserWindow | null;
   settingsWindow: BrowserWindow | null;
@@ -41,7 +51,10 @@ interface AppState {
   proxyIp: string | null;
   exePath: string;
   relayData: RelayData | null;
+  proxyRuleConfig: ProxyRuleConfig | null;
+  routingMap: Record<string, number>;
   numberOfRelays: number;
+  removeStreamListener: (() => void) | null;
   fingerprintData: Map<string, FingerprintData>;
   screenSize: { width: number; height: number };
 }
@@ -64,7 +77,10 @@ export const state: AppState = {
   proxyIp: null,
   exePath: exePath,
   relayData: null,
+  proxyRuleConfig: null,
+  routingMap: {},
   numberOfRelays: 0,
+  removeStreamListener: null,
   fingerprintData: new Map(),
   screenSize: { width: 0, height: 0 },
 };

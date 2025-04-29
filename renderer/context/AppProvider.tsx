@@ -205,6 +205,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         // check relay IP
         window.ipc.getRelayData().then((relayData) => {
           setRelayData(relayData);
+          console.log(relayData, "relayData");
           setNumberOfRelays(relayData?.numberOfRelays);
           window.ipc
             .getGeolocationByCoords(
