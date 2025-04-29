@@ -54,7 +54,6 @@ interface AppState {
   proxyRuleConfig: ProxyRuleConfig | null;
   routingMap: Record<string, number>;
   numberOfRelays: number;
-  removeStreamListener: (() => void) | null;
   fingerprintData: Map<string, FingerprintData>;
   screenSize: { width: number; height: number };
 }
@@ -80,7 +79,6 @@ export const state: AppState = {
   proxyRuleConfig: null,
   routingMap: {},
   numberOfRelays: 0,
-  removeStreamListener: null,
   fingerprintData: new Map(),
   screenSize: { width: 0, height: 0 },
 };

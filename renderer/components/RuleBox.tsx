@@ -21,9 +21,10 @@ interface RuleBoxProps {
   headerBgColor: string;
   deleteProxyRule: (ruleId: string) => void;
   editProxyRule: (rule: Rule) => void;
+  proxyRunning: boolean;
 }
 
-export const RuleBox: React.FC<RuleBoxProps> = ({ rule, headerBgColor, deleteProxyRule, editProxyRule }) => {
+export const RuleBox: React.FC<RuleBoxProps> = ({ rule, headerBgColor, deleteProxyRule, editProxyRule, proxyRunning }) => {
   return (
     <Box
       border="1px solid"
@@ -39,10 +40,18 @@ export const RuleBox: React.FC<RuleBoxProps> = ({ rule, headerBgColor, deletePro
           {rule.title}
         </Text>
         <HStack spacing={2}>
-          <Button size="sm" colorScheme="blue" variant="ghost" onClick={() => editProxyRule(rule)}>
+          <Button size="sm" colorScheme="blue" variant="ghost" onClick={() => editProxyRule(rule)} disabled={proxyRunning} _disabled={{
+            opacity: 0.5,
+            cursor: 'not-allowed',
+            color: 'gray.500'
+          }}>
             Edit
           </Button>
-          <Button size="sm" colorScheme="red" variant="ghost" onClick={() => deleteProxyRule(rule.id)}>
+          <Button size="sm" colorScheme="red" variant="ghost" onClick={() => deleteProxyRule(rule.id)} disabled={proxyRunning} _disabled={{
+            opacity: 0.5,
+            cursor: 'not-allowed',
+            color: 'gray.500'
+          }}>
             Delete
           </Button>
         </HStack>

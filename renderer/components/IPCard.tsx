@@ -276,14 +276,21 @@ const IPCard: React.FC<IPCardProps> = ({
                   color: "white",
                   boxShadow: `0 0 10px ${headerBgColor}, 0 0 10px ${headerBgColor}, 0 0 10px ${headerBgColor}`
                 }}
+                _disabled={{
+                  opacity: 0.5,
+                  cursor: 'not-allowed',
+                  borderColor: 'gray.500',
+                  color: 'gray.500'
+                }}
                 size="md"
                 onClick={onAddRuleOpen}
+                disabled={proxyRunning}
               >
                 Add New Rule
               </Button>
 
               {proxyRules.map((rule) => (
-                <RuleBox key={rule.id} rule={rule} headerBgColor={headerBgColor} deleteProxyRule={handleDeleteProxyRule} editProxyRule={handleEditProxyRule} />
+                <RuleBox key={rule.id} rule={rule} headerBgColor={headerBgColor} deleteProxyRule={handleDeleteProxyRule} editProxyRule={handleEditProxyRule} proxyRunning={proxyRunning} />
               ))}
             </VStack>
           </DrawerBody>

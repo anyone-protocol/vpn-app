@@ -372,7 +372,7 @@ async function createRoutingMap() {
      }
    };
 
-   // Store the remove function in state
+   // Store the remove function in state, automatic cleanup
    await state.anonControlClient.addEventListener(
      eventListener, 
      EventType.STREAM
