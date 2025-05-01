@@ -309,6 +309,7 @@ async function createRoutingMap() {
        const circ = await state.anonControlClient.getCircuit(circuitId);
       //  console.log('Circuit:', circ);
        routingMap[route.targetAddress] = circuitId;
+       console.log('Routing map:', routingMap);
    }
 
    state.routingMap = routingMap;

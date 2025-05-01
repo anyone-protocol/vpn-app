@@ -48,14 +48,18 @@ setInterval(async () => {
       state.tray?.window?.webContents.send("proxy-ip-changed", state.proxyIp);
       // wait 2 seconds to get the relay ip location
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      const newRelayData = await getRelayData();
-      if (newRelayData.ip !== state.relayIp || newRelayData.fingerprint !== state.relayData?.fingerprint) {
-        state.relayIp = newRelayData.ip;
-        state.relayData = newRelayData;
-        const relayLocation = state.fingerprintData.get(newRelayData.fingerprint);
+      try {
+        const newRelayData = await getRelayData();
+        if (newRelayData.ip !== state.relayIp || newRelayData.fingerprint !== state.relayData?.fingerprint) {
+          state.relayIp = newRelayData.ip;
+          state.relayData = newRelayData;
+          const relayLocation = state.fingerprintData.get(newRelayData.fingerprint);
 
-        state.mainWindow?.webContents.send("relay-ip-changed", relayLocation, newRelayData);
-        state.tray?.window?.webContents.send("relay-ip-changed", relayLocation, newRelayData);
+          state.mainWindow?.webContents.send("relay-ip-changed", relayLocation, newRelayData);
+          state.tray?.window?.webContents.send("relay-ip-changed", relayLocation, newRelayData);
+        }
+      } catch (error) {
+        console.error("Error getting relay data:", error);
       }
     }
   }
