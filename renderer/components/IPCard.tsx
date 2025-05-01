@@ -17,7 +17,7 @@ import {
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import { TbCopy, TbCopyCheck } from "react-icons/tb";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAppContext } from "../context/AppProvider";
 import { ipcMain } from "electron";
 import { IoInformationCircleOutline } from "react-icons/io5";
@@ -93,6 +93,7 @@ const IPCard: React.FC<IPCardProps> = ({
   const [isCopied, setIsCopied] = useState(false);
   const [newPort, setNewPort] = useState(proxyPort);
   const [newAnyonePort, setNewAnyonePort] = useState(anyonePort);
+  const editingRuleRef = useRef<Rule | null>(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(value);
@@ -125,6 +126,22 @@ const IPCard: React.FC<IPCardProps> = ({
       console.log("Minimizing App");
     }
     setIsExpanded(!expanded);
+  };
+
+  const handleEditRule = (rule: Rule) => {
+    editingRuleRef.current = rule;
+    onAddRuleOpen();
+  };
+
+  const handleAddRule = (rule: Omit<Rule, "id">) => {
+    handleAddProxyRule(rule);
+    onAddRuleClose();
+  };
+
+  const handleUpdateRule = (updatedRule: Rule) => {
+    handleEditProxyRule(updatedRule);
+    editingRuleRef.current = null;
+    onAddRuleClose();
   };
 
   return (
@@ -290,7 +307,14 @@ const IPCard: React.FC<IPCardProps> = ({
               </Button>
 
               {proxyRules.map((rule) => (
-                <RuleBox key={rule.id} rule={rule} headerBgColor={headerBgColor} deleteProxyRule={handleDeleteProxyRule} editProxyRule={handleEditProxyRule} proxyRunning={proxyRunning} />
+                <RuleBox
+                  key={rule.id}
+                  rule={rule}
+                  headerBgColor={headerBgColor}
+                  deleteProxyRule={handleDeleteProxyRule}
+                  editProxyRule={handleEditRule}
+                  proxyRunning={proxyRunning}
+                />
               ))}
             </VStack>
           </DrawerBody>
@@ -299,9 +323,14 @@ const IPCard: React.FC<IPCardProps> = ({
 
       <NewRuleBox
         isOpen={isAddRuleOpen}
-        onClose={onAddRuleClose}
+        onClose={() => {
+          onAddRuleClose();
+          editingRuleRef.current = null;
+        }}
         headerBgColor={headerBgColor}
-        onAddRule={handleAddProxyRule}
+        onAddRule={handleAddRule}
+        onEditRule={handleUpdateRule}
+        currentRule={editingRuleRef.current}
       />
     </>
   );

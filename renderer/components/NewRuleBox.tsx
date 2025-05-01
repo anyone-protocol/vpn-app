@@ -22,7 +22,7 @@ import {
   ModalCloseButton,
   ModalFooter,
 } from "@chakra-ui/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Rule } from "./RuleBox";
 
 interface NewRuleBoxProps {
@@ -30,6 +30,7 @@ interface NewRuleBoxProps {
   onClose: () => void;
   headerBgColor: string;
   onAddRule?: (rule: Omit<Rule, "id">) => void;
+  onEditRule?: (rule: Rule) => void;
   currentRule?: Rule;
 }
 
@@ -38,6 +39,7 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
   onClose,
   headerBgColor,
   onAddRule,
+  onEditRule,
   currentRule,
 }) => {
   const [title, setTitle] = useState(currentRule?.title || "");
@@ -46,8 +48,27 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
   const [entryCountries, setEntryCountries] = useState(currentRule?.entryCountries.join(",") || "");
   const [exitCountries, setExitCountries] = useState(currentRule?.exitCountries.join(",") || "");
 
+  useEffect(() => {
+    if (currentRule) {
+      setTitle(currentRule.title);
+      setDestinations(currentRule.destinations.join("\n"));
+      setHops(currentRule.hops);
+      setEntryCountries(currentRule.entryCountries.join(","));
+      setExitCountries(currentRule.exitCountries.join(","));
+    }
+  }, [currentRule]);
+
   const handleSubmit = () => {
-    if (onAddRule) {
+    if (currentRule && onEditRule) {
+      onEditRule({
+        ...currentRule,
+        title,
+        destinations: destinations.split("\n").filter(d => d.trim() !== ""),
+        hops,
+        entryCountries: entryCountries.split(",").map(c => c.trim()).filter(c => c !== ""),
+        exitCountries: exitCountries.split(",").map(c => c.trim()).filter(c => c !== ""),
+      });
+    } else if (onAddRule) {
       onAddRule({
         title,
         destinations: destinations.split("\n").filter(d => d.trim() !== ""),
@@ -77,7 +98,7 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
         border="1px solid"
         borderColor="gray.600"
       >
-        <ModalHeader color={headerBgColor}>Add New Rule</ModalHeader>
+        <ModalHeader color={headerBgColor}>{currentRule ? "Edit Rule" : "Add New Rule"}</ModalHeader>
         <ModalCloseButton />
         <ModalBody>
           <VStack spacing={4}>
@@ -180,7 +201,7 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
               onClick={handleSubmit}
               isDisabled={!title || !destinations}
             >
-              Add Rule
+              {currentRule ? "Save Changes" : "Add Rule"}
             </Button>
           </HStack>
         </ModalFooter>

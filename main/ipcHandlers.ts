@@ -204,6 +204,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     };
     const currentRules = store.get("proxyRules", []) as ProxyRule[];
     store.set("proxyRules", [...currentRules, newRule]);
+    state.mainWindow?.webContents.send("proxy-rules-updated", [...currentRules, newRule]);
   });
 
   ipcMain.handle("edit-proxy-rule", async (_event, rule: ProxyRule) => {
@@ -214,13 +215,13 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       throw new Error(`Proxy rule with id ${rule.id} not found`);
     }
     
-
     // TODO: I don't like how this is 0(n), but fine for limited rules
     // Upgrade to a map if this becomes an issue
     const updatedRules = currentRules.map(r => 
       r.id === rule.id ? rule : r
     );
     store.set("proxyRules", updatedRules);
+    state.mainWindow?.webContents.send("proxy-rules-updated", updatedRules);
   });
 
   ipcMain.handle("delete-proxy-rule", async (_event, ruleId: string) => {
