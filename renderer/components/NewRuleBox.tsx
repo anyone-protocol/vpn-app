@@ -54,7 +54,7 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
       setDestinations(currentRule.destinations.join("\n"));
       setHops(currentRule.hops);
       setEntryCountries(currentRule.entryCountries.join(","));
-      setExitCountries(currentRule.exitCountries.join(","));
+      setExitCountries(currentRule.exitCountries.map(c => c.toUpperCase()).join(","));
     }
   }, [currentRule]);
 
@@ -159,7 +159,7 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
               </NumberInput>
             </FormControl>
 
-            <FormControl>
+            {/* <FormControl>
               <FormLabel color="gray.300">Entry Countries (comma-separated)</FormLabel>
               <Input
                 value={entryCountries}
@@ -173,7 +173,7 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
                   boxShadow: `0 0 0 1px ${headerBgColor}`,
                 }}
               />
-            </FormControl>
+            </FormControl> */}
 
             <FormControl>
               <FormLabel color="gray.300">Exit Countries (comma-separated)</FormLabel>

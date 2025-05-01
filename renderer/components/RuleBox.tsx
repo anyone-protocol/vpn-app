@@ -68,14 +68,14 @@ export const RuleBox: React.FC<RuleBoxProps> = ({ rule, headerBgColor, deletePro
           <Text fontSize="sm" color="white">{rule.hops}</Text>
         </Box>
 
-        <Box>
+        {/* <Box>
           <Text fontSize="xs" color="gray.400">Entry Countries:</Text>
           <Text fontSize="sm" color="white">{rule.entryCountries.join(', ')}</Text>
-        </Box>
+        </Box> */}
 
         <Box>
           <Text fontSize="xs" color="gray.400">Exit Countries:</Text>
-          <Text fontSize="sm" color="white">{rule.exitCountries.join(', ')}</Text>
+          <Text fontSize="sm" color="white">{rule.exitCountries.map(c => c.toUpperCase()).join(', ')}</Text>
         </Box>
       </VStack>
     </Box>

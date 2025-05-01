@@ -239,144 +239,180 @@ async function createRoutingMap() {
   const relays = await state.anonControlClient.getRelays();
   let exits = state.anonControlClient.filterRelaysByFlags(relays, Flag.Exit);
   let guards = state.anonControlClient.filterRelaysByFlags(relays, Flag.Guard);
-   // import the routing map from the store
-   const proxyRules = store.get('proxyRules', []) as ProxyRule[];
-   const proxyRuleConfig = {
-     routings: proxyRules.flatMap(rule => 
-       rule.destinations.map(destination => ({
-         targetAddress: destination,
-         hops: rule.hops,
-         entryCountries: rule.entryCountries,
-         exitCountries: rule.exitCountries,
-       }))
-     )
-   } as ProxyRuleConfig;
+  let middleRelays = state.anonControlClient.filterRelaysByFlags(relays, Flag.Stable)
+    .filter(relay => 
+      relay.flags.includes(Flag.Stable) &&
+      relay.flags.includes(Flag.Running) &&
+      !relay.flags.includes(Flag.Exit) && // not Exit allowed for middle
+      !relay.flags.includes(Flag.Guard) // not Guard allowed for middle
+    );
+  
+  // import the routing map from the store
+  const proxyRules = store.get('proxyRules', []) as ProxyRule[];
+  const proxyRuleConfig = {
+    routings: proxyRules.flatMap(rule => 
+      rule.destinations.map(destination => ({
+        targetAddress: destination,
+        hops: rule.hops,
+        entryCountries: rule.entryCountries,
+        exitCountries: rule.exitCountries,
+      }))
+    )
+  } as ProxyRuleConfig;
 
-   state.proxyRuleConfig = proxyRuleConfig;
-  //  console.log('Proxy rule config:', proxyRuleConfig);
+  state.proxyRuleConfig = proxyRuleConfig;
+  const routingMap: Record<string, number> = {};
 
-   const routingMap: Record<string, number> = {};
+  // Filter out bad exits
+  exits = exits.filter((exit) => !exit.flags.includes(Flag.BadExit));
+  console.log('Available exits:', exits.length);
 
-   exits = exits.filter((exit) => {
-       return !exit.flags.includes(Flag.BadExit);
-   });
-
-   console.log('Exits all:', exits.length);
-
-   // populate country field
-    // Retry mechanism for GeoIP data
-    let retries = 3;
-    let success = false;
-    while (retries > 0 && !success) {
-        try {
-            await state.anonControlClient.populateCountries(exits);
-            success = true;
-        } catch (error) {
-            console.log(`GeoIP data not loaded, retrying... (${retries} attempts left)`);
-            retries--;
-            if (retries === 0) {
-                throw new Error('Failed to load GeoIP data after multiple attempts');
-            }
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
-        }
+  // populate country field
+  let retries = 3;
+  let success = false;
+  while (retries > 0 && !success) {
+    try {
+      await state.anonControlClient.populateCountries(exits);
+      success = true;
+    } catch (error) {
+      console.log(`GeoIP data not loaded, retrying... (${retries} attempts left)`);
+      retries--;
+      if (retries === 0) {
+        throw new Error('Failed to load GeoIP data after multiple attempts');
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
+  }
 
-   console.log('Guards:', guards.length);
+  console.log('Available guards:', guards.length);
+  console.log('Available middle relays:', middleRelays.length);
 
-   for (const route of state.proxyRuleConfig.routings) {
-    
-       const exitsByCountry = exits.filter((exit) => {
-           return route.exitCountries.some((country) => exit.country.toLowerCase() === country.toLowerCase());
-       });
+  for (const route of state.proxyRuleConfig.routings) {
+    try {
+      // Get exit node based on country requirements
+      const exitsByCountry = exits.filter((exit) => 
+        route.exitCountries.some((country) => exit.country?.toLowerCase() === country.toLowerCase())
+      );
+      
+      if (exitsByCountry.length === 0) {
+        console.error(`No exits found for countries: ${route.exitCountries.join(', ')}`);
+        continue;
+      }
 
-       console.log('Found exits by country:', exitsByCountry.length);
+      const exit = exitsByCountry[Math.floor(Math.random() * exitsByCountry.length)];
+      
+      // // Get entry guard
+      // const guardsByCountry = guards.filter((guard) => 
+      //   !route.entryCountries.some((country) => guard.country?.toLowerCase() === country.toLowerCase())
+      // );
+      
+      // if (guardsByCountry.length === 0) {
+      //   console.error(`No guards found excluding countries: ${route.entryCountries.join(', ')}`);
+      //   continue;
+      // }
 
-       const exit = exitsByCountry[Math.floor(Math.random() * exitsByCountry.length)];
-      //  console.log('Exit:', exit);
-       const guard = guards[Math.floor(Math.random() * guards.length)];
-      //  console.log('Guard:', guard);
-       const path = [guard.fingerprint, exit.fingerprint];
-      //  console.log('Path:', path);
+      // const guard = guardsByCountry[Math.floor(Math.random() * guardsByCountry.length)];
+      const guard = guards[Math.floor(Math.random() * guards.length)];
 
-       const options: ExtendCircuitOptions = {
-           circuitId: 0,
-           serverSpecs: path,
-           purpose: "general",
-           awaitBuild: true
-       };
+      // Create path with middle relays based on hop count
+      const path = [guard.fingerprint];
+      
+      // Add middle relays if needed (hops - 2 because we already have guard and exit)
+      for (let i = 0; i < route.hops - 2; i++) {
+        const availableMiddleRelays = middleRelays.filter(relay => 
+          !path.includes(relay.fingerprint)
+        );
+        
+        if (availableMiddleRelays.length === 0) {
+          console.error('No available middle relays for path');
+          continue;
+        }
+        
+        const middle = availableMiddleRelays[Math.floor(Math.random() * availableMiddleRelays.length)];
+        path.push(middle.fingerprint);
+      }
+      
+      path.push(exit.fingerprint);
 
-       const circuitId = await state.anonControlClient.extendCircuit(options);
-       const circ = await state.anonControlClient.getCircuit(circuitId);
-      //  console.log('Circuit:', circ);
-       routingMap[route.targetAddress] = circuitId;
-       console.log('Routing map:', routingMap);
-   }
+      console.log(`Created path for ${route.targetAddress} with ${route.hops} hops:`, path);
 
-   state.routingMap = routingMap;
+      const options: ExtendCircuitOptions = {
+        circuitId: 0,
+        serverSpecs: path,
+        purpose: "general",
+        awaitBuild: true
+      };
 
-   await state.anonControlClient.disableStreamAttachment();
+      const circuitId = await state.anonControlClient.extendCircuit(options);
+      const circ = await state.anonControlClient.getCircuit(circuitId);
+      routingMap[route.targetAddress] = circuitId;
+      console.log('Circuit created:', circuitId);
+    } catch (error) {
+      console.error(`Failed to create circuit for ${route.targetAddress}:`, error);
+      continue;
+    }
+  }
 
-   const eventListener = async (event: StreamEvent) => {
-    //  console.log('Event:', event);
-     if (event.status === 'NEW') {
-       const targetAddress = event.target.split(':')[0];
-       const circuitId = state.routingMap[targetAddress];
+  state.routingMap = routingMap;
+  console.log('Final routing map:', routingMap);
 
-       if (circuitId && (event.circId === '0' || event.circId === undefined)) {
+  await state.anonControlClient.disableStreamAttachment();
+
+  const eventListener = async (event: StreamEvent) => {
+    if (event.status === 'NEW') {
+      const targetAddress = event.target.split(':')[0];
+      const circuitId = state.routingMap[targetAddress];
+
+      if (circuitId && (event.circId === '0' || event.circId === undefined)) {
         console.log('Attaching stream to circuit in routing map:', circuitId);
         await state.anonControlClient.attachStream(event.streamId, circuitId);
-        } else {
-            let circuits;
-            let retries = 3;
-            let success = false;
+      } else {
+        let circuits;
+        let retries = 3;
+        let success = false;
+        
+        while (retries > 0 && !success) {
+          try {
+            circuits = await state.anonControlClient.circuitStatus();
             
-            while (retries > 0 && !success) {
-                try {
-                    circuits = await state.anonControlClient.circuitStatus();
-                    // console.log('Raw circuit status response:', circuits);
-                    
-                    if (!circuits || circuits.length === 0) {
-                        throw new Error('No circuits found in response');
-                    }
-                    
-                    success = true;
-                } catch (error) {
-                    console.log(`Error getting circuit status (attempt ${4-retries}/3):`, error.message);
-                    if (error.message.includes('Failed to get relay address')) {
-                        // If we got circuit status but failed to get relay info, we can still proceed
-                        console.log('Got circuit status but failed to get relay info, proceeding with available data');
-                        success = true;
-                    } else {
-                        retries--;
-                        if (retries === 0) {
-                            console.error('Failed to get circuit status after multiple attempts:', error);
-                            return;
-                        }
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                    }
-                }
+            if (!circuits || circuits.length === 0) {
+              throw new Error('No circuits found in response');
             }
             
-            // console.log('Circuits:', circuits);
-            const openCircuits = circuits.filter(circuit => 
-                circuit.state === 'BUILT' && 
-                circuit.purpose === 'GENERAL' &&
-                circuit.relays.length === 3
-            );
-            
-            if (openCircuits.length > 0) {
-                const randomCircuit = openCircuits[Math.floor(Math.random() * openCircuits.length)];
-                console.log(`Found ${openCircuits.length} open circuits, randomly selected circuit ${randomCircuit.circuitId}`);
-                await state.anonControlClient.attachStream(event.streamId, randomCircuit.circuitId);
+            success = true;
+          } catch (error) {
+            console.log(`Error getting circuit status (attempt ${4-retries}/3):`, error.message);
+            if (error.message.includes('Failed to get relay address')) {
+              console.log('Got circuit status but failed to get relay info, proceeding with available data');
+              success = true;
+            } else {
+              retries--;
+              if (retries === 0) {
+                console.error('Failed to get circuit status after multiple attempts:', error);
+                return;
+              }
+              await new Promise(resolve => setTimeout(resolve, 2000));
             }
+          }
         }
-     }
-   };
+        
+        const openCircuits = circuits.filter(circuit => 
+          circuit.state === 'BUILT' && 
+          circuit.purpose === 'GENERAL' &&
+          circuit.relays.length === 3
+        );
+        
+        if (openCircuits.length > 0) {
+          const randomCircuit = openCircuits[Math.floor(Math.random() * openCircuits.length)];
+          console.log(`Found ${openCircuits.length} open circuits, randomly selected circuit ${randomCircuit.circuitId}`);
+          await state.anonControlClient.attachStream(event.streamId, randomCircuit.circuitId);
+        }
+      }
+    }
+  };
 
-   // Store the remove function in state, automatic cleanup
-   await state.anonControlClient.addEventListener(
-     eventListener, 
-     EventType.STREAM
-   );
-  
+  await state.anonControlClient.addEventListener(
+    eventListener, 
+    EventType.STREAM
+  );
 }

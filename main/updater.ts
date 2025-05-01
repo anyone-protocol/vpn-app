@@ -49,6 +49,7 @@ setInterval(async () => {
       // wait 2 seconds to get the relay ip location
       await new Promise((resolve) => setTimeout(resolve, 2000));
       try {
+        console.log("THIS IS BEING CALLED");
         const newRelayData = await getRelayData();
         if (newRelayData.ip !== state.relayIp || newRelayData.fingerprint !== state.relayData?.fingerprint) {
           state.relayIp = newRelayData.ip;
