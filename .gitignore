@@ -19,3 +19,7 @@ package-mac-signed.sh
 .env
 certificate.txt
 scripts/notarize.js
+
+/out
+
+.DS_Store

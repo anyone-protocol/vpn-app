@@ -11,18 +11,22 @@
     "dev": "node start.js",
     "build": "nextron build",
     "postinstall": "electron-builder install-app-deps",
-    "build:mac": "nextron build --mac",
+    "build:mac": "node package-mac.js",
+    "build:macNormal": "nextron build --mac",
     "build:mac:universal": "nextron build --mac --universal",
     "build:linux": "nextron build --linux",
     "build:win": "nextron build --win --x64",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac --publish never",
     "dist:mac-arm": "electron-builder --mac --arm64",
-    "dist:linux": "electron-builder --linux"
+    "dist:linux": "electron-builder --linux",
+    "forge:package": "electron-forge package",
+    "forge:sign": "electron-forge publish --dry-run --platform=darwin --arch=arm64 --make-only-sign",
+    "forge:notarize": "electron-forge publish --dry-run --platform=darwin --arch=arm64 --make-only-notarize",
+    "forge:build:mac": "electron-forge make --platform=darwin --arch=arm64"
   },
   "dependencies": {
     "@anyone-protocol/anyone-client": "^1.0.0-beta.1",
-    "@electron/osx-sign": "^1.3.2",
     "@lwtlab/node-mac-app-icon": "^0.1.0",
     "auto-launch": "^5.0.6",
     "electron-serve": "^1.3.0",
@@ -37,7 +41,12 @@
     "@chakra-ui/icons": "^2.1.1",
     "@chakra-ui/react": "^2.9.3",
     "@chakra-ui/theme-tools": "^2.1.2",
+    "@electron-forge/cli": "^7.8.0",
+    "@electron-forge/maker-dmg": "^7.8.0",
+    "@electron-forge/maker-zip": "^7.8.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.8.0",
     "@electron/notarize": "^2.5.0",
+    "@electron/osx-sign": "^1.3.3",
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
     "@react-three/drei": "^9.120.4",
@@ -45,9 +54,11 @@
     "@types/leaflet": "^1.9.12",
     "@types/node": "^20.11.16",
     "@types/react": "^18.2.52",
+    "asar": "^3.2.0",
     "electron": "^31.0.1",
     "electron-builder": "^24.13.3",
     "electron-builder-notarize": "^1.5.2",
+    "electron-packager": "^17.1.2",
     "file-loader": "^6.2.0",
     "framer-motion": "^11.11.1",
     "lottie-web": "^5.12.2",
@@ -71,6 +82,24 @@
     "asarUnpack": [
       "node_modules/@anyone-protocol/anyone-client/bin"
     ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "identity": "Apple Development: Sarvesh Rajdev (GXAG86Q5C2)",
+      "signIgnore": [
+        "node_modules/@anyone-protocol/anyone-client/bin/ios",
+        "node_modules/@anyone-protocol/anyone-client/bin/android",
+        "node_modules/@anyone-protocol/anyone-client/bin/darwin",
+        "node_modules/@anyone-protocol/anyone-client/bin/linux"
+      ]
+    },
     "win": {
       "target": "nsis",
       "icon": "resources/icon.ico",
@@ -82,7 +111,7 @@
       ]
     },
     "dmg": {
-      "sign": false
+      "sign": true
     },
     "afterSign": "notarize.js",
     "linux": {
