@@ -67,33 +67,26 @@ export async function getGroupedConnectedProcesses(
 
   // Fetch icons for each grouped process
   const groupedList: GroupedProcessInfo[] = [];
-  //filter removed group process name Electron, also remove \x20H \x20 from process name
 
   for (const key in grouped) {
     const group = grouped[key];
-    // Fetch icon using the first PID in the group
-    const osPlatform = platform();
+    // Only try to get icon if we don't have one already
+    if (!group.iconPath) {
+      const osPlatform = platform();
 
-    if (osPlatform === "win32") {
-      const iconPath = await getProcessIconPathWindows(
-        group.pids[0].toString()
-      );
-      // console.log(`Icon for ${group.processName}: ${iconPath}`);
-
-      group.iconPath = iconPath;
-    } else if (osPlatform === "darwin") {
-      const iconPath = await getProcessIconUnix(group.pids[0].toString());
-      console.log(`Icon for ${group.processName}: ${iconPath}`);
-
-      group.iconPath = iconPath;
-    } else if (osPlatform === "linux") {
-      const iconPath = await getProcessIconPathUnix(group.pids[0].toString());
-      console.log(
-        `Icon for ${group.processName.replace("\x20H", "")}: ${iconPath}`
-      );
-
-      group.iconPath = iconPath;
-      group.processName = normalizeProcessNameCapital(group.processName);
+      if (osPlatform === "win32") {
+        const iconPath = await getProcessIconPathWindows(
+          group.pids[0].toString()
+        );
+        group.iconPath = iconPath;
+      } else if (osPlatform === "darwin") {
+        const iconPath = await getProcessIconUnix(group.pids[0].toString());
+        group.iconPath = iconPath;
+      } else if (osPlatform === "linux") {
+        const iconPath = await getProcessIconPathUnix(group.pids[0].toString());
+        group.iconPath = iconPath;
+        group.processName = normalizeProcessNameCapital(group.processName);
+      }
     }
     groupedList.push(group);
   }

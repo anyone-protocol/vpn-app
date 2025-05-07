@@ -9,13 +9,19 @@ import axios from "axios";
 import { processIconMap, normalizeProcessName } from "./processIconMap";
 import svg2img from "svg2img";
 const execAsync = util.promisify(exec);
-const iconCache: { [key: string]: string } = {}; // Cache for icons
+let iconCache: { [key: string]: string } = {}; // Cache for icons
+let failedIconCache: { [key: string]: boolean } = {}; // Cache for failed attempts
 
 export async function getProcessIconUnix(pid: string): Promise<string | null> {
   try {
     const exePath = await getExecutablePathUnix(pid);
+    
     if (!exePath) {
       console.error(`Executable path not found for PID: ${pid}`);
+      return null;
+    }
+
+    if (!exePath.includes("Applications")) {
       return null;
     }
 
@@ -24,12 +30,17 @@ export async function getProcessIconUnix(pid: string): Promise<string | null> {
     const iconFileName = `icon_${processName}.png`;
     const iconPngPath = path.join(destinationFolder, iconFileName);
 
-    // Check cache first
+    // Check cache first - if we have a cached icon, return it immediately
     if (iconCache[processName]) {
       const cachedPath = iconCache[processName];
       if (fs.existsSync(cachedPath)) {
         return cachedPath;
       }
+    }
+
+    // If we've tried to get an icon for this process before and failed, don't try again
+    if (failedIconCache[processName]) {
+      return null;
     }
 
     // Try to get the icon as a buffer from getAppIconByPid
@@ -63,13 +74,28 @@ export async function getProcessIconUnix(pid: string): Promise<string | null> {
         saveIconCache();
         return iconPngPath;
       } else {
-        console.warn(
-          `Local icon not found for process ${processName}. Attempting to fetch from web.`
-        );
-        return await fetchIconFromWeb(processName);
+        // Try web fetch only if we haven't tried before
+        if (!failedIconCache[`${processName}_web_tried`]) {
+          console.warn(
+            `Local icon not found for process ${processName}. Attempting to fetch from web.`
+          );
+          const webIcon = await fetchIconFromWeb(processName);
+          if (webIcon) {
+            return webIcon;
+          }
+          // Mark that we've tried web fetch for this process
+          failedIconCache[`${processName}_web_tried`] = true;
+        }
+        // Mark that we've failed to get an icon for this process
+        failedIconCache[processName] = true;
+        saveIconCache();
+        return null;
       }
     } catch (error: any) {
       console.error(`Error extracting icon for ${processName}:`, error);
+      // Mark that we've failed to get an icon for this process
+      failedIconCache[processName] = true;
+      saveIconCache();
       return null;
     }
   } catch (error) {
@@ -201,10 +227,28 @@ async function getLinuxAppIconPath(exePath: string): Promise<string | null> {
 // Function to save icon cache to disk (optional)
 function saveIconCache() {
   const cachePath = path.join(app.getPath("userData"), "iconCache.json");
-  fs.writeFileSync(cachePath, JSON.stringify(iconCache));
+  fs.writeFileSync(cachePath, JSON.stringify({
+    icons: iconCache,
+    failed: failedIconCache
+  }));
 
   console.log("Icon cache saved to disk.");
 }
+
+// Load cache on startup
+const cachePath = path.join(app.getPath("userData"), "iconCache.json");
+if (fs.existsSync(cachePath)) {
+  try {
+    const cacheData = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+    iconCache = cacheData.icons || {};
+    failedIconCache = cacheData.failed || {};
+  } catch (error) {
+    console.error("Failed to parse icon cache. Starting with empty caches.");
+    iconCache = {};
+    failedIconCache = {};
+  }
+}
+
 async function fetchIconFromWeb(processName: string): Promise<string | null> {
   try {
     let iconUrl: string | null = null;
