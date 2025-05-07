@@ -105,9 +105,9 @@ export function checkIP(useProxy: boolean): Promise<string | null> {
 
 export async function getGeolocation(ip: string) {
   try {
-    // First, try fetching from ipapi.co
-    const response = await fetch(`https://ipapi.co/${ip}/json/`);
-    if (!response.ok) throw new Error("ipapi.co failed");
+    // First, try fetching from ipwhois.io
+    const response = await fetch(`https://ipwhois.app/json/${ip}`);
+    if (!response.ok) throw new Error("ipwhois.app failed");
 
     const data = await response.json();
     return {
@@ -115,16 +115,16 @@ export async function getGeolocation(ip: string) {
       longitude: data.longitude,
       city: data.city,
       region: data.region,
-      country: data.country_name,
-      countryCode: data.country,
+      country: data.country,
+      countryCode: data.country_code,
     };
   } catch (error) {
-    console.error("Primary API (ipapi.co) failed:", error);
+    console.error("Primary API (ipwhois.app) failed:", error);
 
-    // Fallback to ipwhois.io if the primary API fails
+    // Fallback to ipapi.co if the primary API fails
     try {
-      const fallbackResponse = await fetch(`https://ipwhois.app/json/${ip}`);
-      if (!fallbackResponse.ok) throw new Error("ipwhois.app failed");
+      const fallbackResponse = await fetch(`https://ipapi.co/${ip}/json/`);
+      if (!fallbackResponse.ok) throw new Error("ipapi.co failed");
 
       const fallbackData = await fallbackResponse.json();
       return {
@@ -132,11 +132,11 @@ export async function getGeolocation(ip: string) {
         longitude: fallbackData.longitude,
         city: fallbackData.city,
         region: fallbackData.region,
-        country: fallbackData.country,
-        countryCode: fallbackData.country_code,
+        country: fallbackData.country_name,
+        countryCode: fallbackData.country,
       };
     } catch (fallbackError) {
-      console.error("Fallback API (ipwhois.app) failed:", fallbackError);
+      console.error("Fallback API (ipapi.co) failed:", fallbackError);
       return null;
     }
   }
