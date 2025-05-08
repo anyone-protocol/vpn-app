@@ -11,10 +11,14 @@ import { setProxySettings } from "./systemProxy";
 import { isProd } from "./constants";
 import { createAppMenu } from "./app.menu";
 import { initializeState, state } from "./state";
+import log from 'electron-log/main';
 import path from "path";
 
 (async () => {
+
   app.setName("Anyone VPN");
+  log.initialize({ preload: true });
+  console.log = log.log;
   const platform = process.platform;
   if (process.platform === "darwin") {
     app.setAboutPanelOptions({
