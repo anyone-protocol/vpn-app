@@ -52,6 +52,7 @@ export async function startAnyoneProxy() {
 
   try {
     const exePath = state.exePath;
+    const termsFilePath = state.termsFilePath;
     // const anonPort = await state.anonPort;
     // const anonControlPort = state.anonControlPort;
     // state.anonPort = anonPort;
@@ -59,13 +60,30 @@ export async function startAnyoneProxy() {
 
     console.log("connecting with anyone port: ", state.anonPort);
 
-    state.anon = new Process({
-      displayLog: true,
-      // socksPort: state.anonPort,
-      // controlPort: state.anonControlPort,
-      binaryPath: exePath,
-      autoTermsAgreement: true,
-    });
+    try {
+      if (termsFilePath) {
+        state.anon = new Process({
+          displayLog: false,
+          // socksPort: state.anonPort,
+          // controlPort: state.anonControlPort,
+          binaryPath: exePath,
+          autoTermsAgreement: true,
+          termsFilePath: termsFilePath,
+        });
+      } else {
+        state.anon = new Process({
+          displayLog: false,
+          binaryPath: exePath,
+          autoTermsAgreement: true,
+        });
+      }
+    } catch (error) {
+      console.error("Error creating Anyone process:", error);
+      state.mainWindow?.webContents.send(
+        "proxy-error",
+        `Error creating Anyone process: ${error.message}`
+      );
+    }
 
     state.anonPort = state.anon.getSOCKSPort();
     state.anonControlPort = state.anon.getControlPort();
@@ -103,7 +121,7 @@ export async function startAnyoneProxy() {
     state.relayData = relayData;
     state.numberOfRelays = relayData.numberOfRelays;
 
-    await createRoutingMap();
+    // await createRoutingMap();
 
     state.mainWindow?.webContents.send("proxy-started");
     state.tray?.window?.webContents.send("proxy-started");
@@ -133,55 +151,60 @@ export async function startAnyoneProxy() {
 }
 
 export async function getRelayData() {
-  let retries = 3;
+  let circuitRetries = 3;
+  let relayInfoRetries = 2;
   let lastError = null;
 
-  while (retries > 0) {
+  while (circuitRetries > 0) {
     try {
       const circuits = await state.anonControlClient.circuitStatus();
-      // console.log('Raw circuit status in getRelayData:', circuits);
+      console.log('Got circuit status');
       
       // If we get here, we successfully got the circuit status
       for (const circuit of circuits) {
         const nodes = circuit.relays;
         if (nodes && nodes.length > 0) {
           const fingerprint = nodes[0].fingerprint;
-          try {
-            const relayInfo = await state.anonControlClient.getRelayInfo(fingerprint);
-            const nickname = relayInfo.nickname;
-            const ip = relayInfo.ip;
-            const locationData = state.fingerprintData.get(fingerprint);
-            return {
-              ip,
-              fingerprint,
-              nickname,
-              coordinates: locationData?.coordinates,
-              hexId: locationData?.hexID,
-              numberOfRelays: circuits.length,
-            } as RelayData;
-          } catch (relayError) {
-            console.log(`Error getting relay info (attempt ${4-retries}/3):`, relayError);
-            lastError = relayError;
-            retries--;
-            if (retries === 0) break;
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            continue; // Try the next circuit
+          let relayInfoAttempts = relayInfoRetries;
+          
+          while (relayInfoAttempts > 0) {
+            try {
+              const relayInfo = await state.anonControlClient.getRelayInfo(fingerprint);
+              const nickname = relayInfo.nickname;
+              const ip = relayInfo.ip;
+              const locationData = state.fingerprintData.get(fingerprint);
+              return {
+                ip,
+                fingerprint,
+                nickname,
+                coordinates: locationData?.coordinates,
+                hexId: locationData?.hexID,
+                numberOfRelays: circuits.length,
+              } as RelayData;
+            } catch (relayError) {
+              console.log(`Error getting relay info (attempt ${relayInfoRetries - relayInfoAttempts + 1}/${relayInfoRetries}):`, relayError);
+              lastError = relayError;
+              relayInfoAttempts--;
+              if (relayInfoAttempts === 0) break;
+              // await new Promise(resolve => setTimeout(resolve, 1000));
+              continue;
+            }
           }
         }
       }
       
       // If we get here, no circuits had relays or we couldn't get relay info
-      retries--;
-      if (retries === 0) break;
-      console.log(`No valid circuits found, retrying... (${retries} attempts left)`);
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      circuitRetries--;
+      if (circuitRetries === 0) break;
+      console.log(`No valid circuits found, retrying... (${circuitRetries} attempts left)`);
+      // await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (error: any) {
-      console.log(`Error getting circuit status (attempt ${4-retries}/3):`, error);
+      console.log(`Error getting circuit status (attempt ${4-circuitRetries}/3):`, error);
       lastError = error;
-      retries--;
-      if (retries === 0) break;
-      console.log(`Retrying in 2 seconds... (${retries} attempts left)`);
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      circuitRetries--;
+      if (circuitRetries === 0) break;
+      console.log(`Retrying in 2 seconds... (${circuitRetries} attempts left)`);
+      // await new Promise(resolve => setTimeout(resolve, 2000));
     }
   }
 

@@ -16,7 +16,6 @@ module.exports = {
       'signature-size': 4000,
       'signature-flags': 'library',
       timestamp: true,
-      type: 'development'
     },
     osxNotarize: {
       tool: 'notarytool',
@@ -29,6 +28,10 @@ module.exports = {
       /\.git/,
       /\.vscode/,
       /\.DS_Store/
+    ],
+    extraResource: [
+      'renderer/.next',
+      'terms-agreement'
     ]
   },
   rebuildConfig: {},

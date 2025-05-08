@@ -3,7 +3,7 @@ import serve from "electron-serve";
 import path from "path";
 import { app } from "electron";
 
-export const isProd = process.env.NODE_ENV === "production";
+export const isProd = app.isPackaged;
 
 if (isProd) {
   serve({ directory: "app" });
@@ -93,4 +93,33 @@ export const exePath = (() => {
   }
 
   return exePath;
+})();
+
+export const termsFilePath = (() => {
+  let termsFilePath;
+  const platform = process.platform;
+
+  if (app.isPackaged) {
+    if (platform === "win32") {
+      termsFilePath = path.join(
+        process.resourcesPath,
+        "app.asar.unpacked",
+        "terms-agreement"
+      );
+    } else if (platform === "darwin") {
+      termsFilePath = path.join(
+        process.resourcesPath,
+        "app.asar.unpacked",
+        "terms-agreement"
+      );
+    } else if (platform === "linux") {
+      termsFilePath = path.join(
+        process.resourcesPath,
+        "app.asar.unpacked",
+        "terms-agreement"
+      );
+    }
+  }
+
+  return termsFilePath;
 })();
