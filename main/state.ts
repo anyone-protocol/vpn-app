@@ -5,7 +5,7 @@ import {
   Socks,
   Control,
 } from "@anyone-protocol/anyone-client";
-import { exePath } from "./constants";
+import { exePath, termsFilePath } from "./constants";
 import { FingerPrintData } from "./utils";
 import { Menubar } from "menubar";
 
@@ -56,6 +56,7 @@ interface AppState {
   numberOfRelays: number;
   fingerprintData: Map<string, FingerprintData>;
   screenSize: { width: number; height: number };
+  termsFilePath: string | null;
 }
 
 export const state: AppState = {
@@ -81,6 +82,7 @@ export const state: AppState = {
   numberOfRelays: 0,
   fingerprintData: new Map(),
   screenSize: { width: 0, height: 0 },
+  termsFilePath: termsFilePath,
 };
 
 export async function initializeState() {
