@@ -32,8 +32,7 @@ autoUpdater.on("update-downloaded", () => {
   }
 });
 
-// watch for real ip changes
-setInterval(async () => {
+export async function checkIPsAndRelay() {
   const newRealIp = await checkIP(false);
   if (newRealIp !== state.realIp) {
     state.realIp = newRealIp;
@@ -64,4 +63,7 @@ setInterval(async () => {
       }
     }
   }
-}, 15000);
+}
+
+// Remove the setInterval and call the function once
+checkIPsAndRelay();

@@ -4,9 +4,12 @@ require('dotenv').config();
 module.exports = {
   packagerConfig: {
     asar: {
-      unpack: '**/node_modules/@anyone-protocol/anyone-client/bin/darwin/{arm64,x64}/{.**,**}/**'
+      unpack: [
+        '**/node_modules/@anyone-protocol/anyone-client/bin/{darwin,win32}/{arm64,x64}/{.**,**}/**',
+        '**/node_modules/@resvg/resvg-js*/**'
+      ]
     },
-    icon: 'resources/icon.icns',
+    icon: process.platform === 'darwin' ? 'resources/icon.icns' : 'resources/icon.ico',
     osxSign: {
       identity: process.env.CSC_NAME,
       'hardened-runtime': true,
@@ -45,6 +48,10 @@ module.exports = {
     {
       name: '@electron-forge/maker-zip',
       platforms: ['darwin']
+    },
+    {
+      name: '@electron-forge/maker-zip',
+      platforms: ['win32']
     }
   ],
   plugins: [

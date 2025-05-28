@@ -297,11 +297,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         alert(`Proxy Error: ${message}`);
       });
 
+      const removeAnonRunningErrorListener = window.ipc.onAnonRunningError(async (message) => {
+        setIsLoading(false);
+        const shouldKill = window.confirm(
+          "Anyone process is already running in the background. Would you like to kill it and start a new one?"
+        );
+        
+        if (shouldKill) {
+          setIsLoading(true);
+          try {
+            await window.ipc.killAnonProcess();
+            // After killing the process, try starting the proxy again
+            await window.ipc.startProxy();
+          } catch (error) {
+            console.error("Error killing Anyone process:", error);
+            alert("Failed to kill the Anyone process. Please try again.");
+            setIsLoading(false);
+          }
+        }
+      });
+
       // Cleanup function
       return () => {
         removeProxyStartedListener();
         removeProxyStoppedListener();
         removeProxyErrorListener();
+        removeAnonRunningErrorListener();
         removeProxychangeListener();
         removeRealIPListener();
         removeRelayIPListener();

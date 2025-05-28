@@ -3,6 +3,7 @@ import {
   Process,
   Socks,
   Control,
+  AnonRunningError
 } from "@anyone-protocol/anyone-client";
 import {
   startProxy as startPrivoxy,
@@ -90,7 +91,24 @@ export async function startAnyoneProxy() {
 
     state.anonSocksClient = new Socks(state.anon);
 
-    await state.anon.start();
+    try {
+      await state.anon.start();
+    } catch (error) {
+      if (error instanceof AnonRunningError) {
+        console.log("Anyone process is already running");
+        state.mainWindow?.webContents.send(
+          "anon-running-error",
+          `Anyone process is already running`
+        );
+      } else {
+        console.error("Error starting Anyone process:", error);
+        state.mainWindow?.webContents.send(
+          "proxy-error",
+            `Error starting Anyone process: ${error.message}`
+          );
+        }
+      return;
+    }
     console.log("Anyone proxy started.");
 
     state.proxyPort = await startPrivoxy(state.anonPort);

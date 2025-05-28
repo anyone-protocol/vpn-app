@@ -23,6 +23,7 @@ import { state } from "./state";
 import { app } from "./background";
 import { UpdateTrayIcon } from "./tray";
 import { ProxyRule } from "./proxy";
+import { Process } from "@anyone-protocol/anyone-client";
 const store = new Store();
 
 export function setupIpcHandlers(mainWindow: BrowserWindow) {
@@ -267,5 +268,21 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
   ipcMain.handle("dark-mode:system", () => {
     nativeTheme.themeSource = "system";
+  });
+
+  ipcMain.handle("kill-anon-process", async () => {
+    try {
+      if (state.anon) {
+        await Process.killAnonProcess();
+        state.anon = null;
+        state.anonSocksClient = null;
+        state.isProxyRunning = false;
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error killing Anyone process:", error);
+      throw error;
+    }
   });
 }

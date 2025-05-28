@@ -2,6 +2,7 @@
 import { Notification, nativeImage } from "electron";
 import fs from "fs";
 import path from "path";
+import { state } from "./state";
 
 export function showNotification(title: string, body: string) {
   new Notification({ title, body }).show();
@@ -68,38 +69,50 @@ export function getFingerPrintData(): Promise<Map<string, FingerPrintData> | nul
 export function checkIP(useProxy: boolean): Promise<string | null> {
   return new Promise((resolve) => {
     const url = "https://api.ipify.org?format=json";
-    const options: any = {
-      method: "GET",
-    };
 
     if (useProxy) {
-      const HttpsProxyAgent = require("https-proxy-agent");
-      options.agent = new HttpsProxyAgent("http://127.0.0.1:8118");
-    }
-
-    const https = require("https");
-    const req = https.request(url, options, (res: any) => {
-      let data = "";
-      res.on("data", (chunk: any) => {
-        data += chunk;
-      });
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(data);
-          resolve(json.ip);
-        } catch (error) {
-          console.error("Error parsing IP response:", error);
+      state.anonSocksClient.get(url)
+        .then(response => {
+          try {
+            resolve(response.data.ip);
+          } catch (error) {
+            console.error("Error parsing IP response:", error);
+            resolve(null);
+          }
+        })
+        .catch(error => {
+          console.error("Error fetching IP address:", error);
           resolve(null);
-        }
+        });
+    } else {
+      const options: any = {
+        method: "GET",
+      };
+
+      const https = require("https");
+      const req = https.request(url, options, (res: any) => {
+        let data = "";
+        res.on("data", (chunk: any) => {
+          data += chunk;
+        });
+        res.on("end", () => {
+          try {
+            const json = JSON.parse(data);
+            resolve(json.ip);
+          } catch (error) {
+            console.error("Error parsing IP response:", error);
+            resolve(null);
+          }
+        });
       });
-    });
 
-    req.on("error", (error: any) => {
-      console.error("Error fetching IP address:", error);
-      resolve(null);
-    });
+      req.on("error", (error: any) => {
+        console.error("Error fetching IP address:", error);
+        resolve(null);
+      });
 
-    req.end();
+      req.end();
+    }
   });
 }
 

@@ -56,6 +56,14 @@ const handler = {
       ipcRenderer.removeListener("proxy-error", subscription);
     };
   },
+  onAnonRunningError(callback: (message: string) => void) {
+    const subscription = (_event: IpcRendererEvent, message: string) =>
+      callback(message);
+    ipcRenderer.on("anon-running-error", subscription);
+    return () => {
+      ipcRenderer.removeListener("anon-running-error", subscription);
+    };
+  },
   // Event listeners for update events
   onUpdateAvailable(callback: () => void) {
     const subscription = () => callback();
@@ -183,6 +191,7 @@ const handler = {
   editProxyRule: (rule: ProxyRule) => ipcRenderer.invoke("edit-proxy-rule", rule),
   deleteProxyRule: (ruleId: string) => ipcRenderer.invoke("delete-proxy-rule", ruleId),
   getProxyRules: () => ipcRenderer.invoke("get-proxy-rules"),
+  killAnonProcess: () => ipcRenderer.invoke("kill-anon-process"),
 };
 
 contextBridge.exposeInMainWorld("ipc", handler);
