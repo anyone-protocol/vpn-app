@@ -34,6 +34,7 @@ const ExitButton = dynamic(() => import("../components/ExitButton"), {
 
 export default function TrayPage() {
   const {
+    appBooted,
     realIP,
     proxyRunning,
     proxyIP,
@@ -107,6 +108,7 @@ export default function TrayPage() {
           />
         </Button>
         <ProxyStatus
+          appBooted={appBooted}
           isLoading={isLoading}
           proxyRunning={proxyRunning}
           realLocation={realLocation}

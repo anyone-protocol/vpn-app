@@ -44,6 +44,7 @@ const GlobeComponent = dynamic(
 
 function ExpandedHomePage() {
   const {
+    appBooted,
     realIP,
     proxyIP,
     relayData,
@@ -246,6 +247,7 @@ function ExpandedHomePage() {
                     alignItems="stretch"
                   >
                     <ProxyStatus
+                      appBooted={appBooted}
                       isLoading={isLoading}
                       proxyRunning={proxyRunning}
                       realLocation={realLocation}

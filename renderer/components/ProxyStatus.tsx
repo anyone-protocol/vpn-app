@@ -11,6 +11,7 @@ interface LocationData {
   countryCode: string;
 }
 interface ProxyStatusProps {
+  appBooted: boolean;
   isLoading: boolean;
   proxyRunning: boolean;
   realLocation: LocationData;
@@ -38,6 +39,7 @@ const formatTime = (seconds: number): string => {
 };
 
 const ProxyStatus: React.FC<ProxyStatusProps> = ({
+  appBooted,
   isLoading,
   proxyRunning,
   realLocation,
@@ -53,8 +55,11 @@ const ProxyStatus: React.FC<ProxyStatusProps> = ({
   numberOfRelays,
 }) => {
   const [hovered, setHovered] = React.useState(false);
+  console.log(appBooted, "appBooted");
 
-  const statusText = isLoading
+  const statusText = !appBooted
+    ? "App starting"
+    : isLoading
     ? proxyRunning
       ? "Disconnecting"
       : "Connecting"
@@ -66,7 +71,9 @@ const ProxyStatus: React.FC<ProxyStatusProps> = ({
     ? "Connected"
     : "Click to Connect";
 
-  const statusColor = isLoading
+  const statusColor = !appBooted
+    ? "yellow.500"
+    : isLoading
     ? "red.500"
     : proxyRunning
     ? "green.500"

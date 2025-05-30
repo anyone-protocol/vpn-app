@@ -44,6 +44,7 @@ interface AppContextType {
   handleDeleteProxyRule: (ruleId: string) => void;
   windowSize: { width: number; height: number };
   screenSize: { width: number; height: number };
+  appBooted: boolean;
 }
 
 interface GroupedProcessInfo {
@@ -70,6 +71,7 @@ export const useAppContext = () => {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const [appBooted, setAppBooted] = useState<boolean>(false);
   const [realIP, setRealIP] = useState<string | null>("");
   const [relayData, setRelayData] = useState<RelayData | null>(null);
 
@@ -162,6 +164,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       setIsLoading(false);
+      setAppBooted(true);
     }
   };
 
@@ -473,6 +476,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         handleAddProxyRule,
         handleEditProxyRule,
         handleDeleteProxyRule,
+        appBooted,
       }}
     >
       {children}
