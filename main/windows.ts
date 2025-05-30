@@ -53,10 +53,12 @@ export function createMainWindow(): BrowserWindow {
 
   mainWindow.on("close", (event) => {
     event.preventDefault();
-    mainWindow.hide();
     if (platform === "darwin") {
       app.dock.hide();
     }
+    mainWindow.hide();
+    state.tray.app.quit();
+    state.tray.app.exit();
   });
 
   mainWindow.on("system-context-menu", (event) => {
