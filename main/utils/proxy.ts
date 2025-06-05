@@ -109,7 +109,7 @@ export async function startProxy(anonPort: number): Promise<number> {
     });
 
     await proxyServer.listen();
-    console.log("Proxy-chain started on port 8118.");
+    console.log(`Proxy-chain started on port ${port}.`);
     return port;
   } catch (error) {
     console.error("Error starting proxy-chain:", error);

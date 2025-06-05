@@ -86,7 +86,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
   const [groupedProcesses, setGroupedProcesses] = useState<
     GroupedProcessInfo[]
   >([]);
-  const [proxyPort, setProxyPort] = useState<number>(8118); // Default proxy port
+  const [proxyPort, setProxyPort] = useState<number>(9050); // Default proxy port - same as anon port (direct socks proxy without proxy chains)
   const [anyonePort, setAnyonePort] = useState<number>(9050); // Default anyone port
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [relayLocationData, setRelayLocationData] = useState<

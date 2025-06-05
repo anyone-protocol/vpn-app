@@ -68,7 +68,7 @@ export const state: AppState = {
   anon: null,
   anonSocksClient: null,
   anonControlClient: null,
-  proxyPort: 8118,
+  proxyPort: 9050, // Use the same port as the anon socks port
   anonPort: 9050,
   anonControlPort: 9051,
   orPort: 9001,
