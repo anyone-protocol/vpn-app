@@ -111,7 +111,8 @@ export async function startAnyoneProxy() {
     }
     console.log("Anyone proxy started.");
 
-    state.proxyPort = await startPrivoxy(state.anonPort);
+    // do not start privoxy, use anon directly
+    // state.proxyPort = await startPrivoxy(state.anonPort);
 
     setProxySettings(true, state.proxyPort);
 
