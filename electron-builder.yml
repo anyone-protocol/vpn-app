@@ -1,6 +1,6 @@
 appId: io.anyone.AnyoneDesktop
 productName: Anyone Vpn
-copyright: Copyright © 2025 Malibu
+copyright: Copyright © 2025 Anyone Protocol
 afterSign: scripts/notarize.js
 forceCodeSigning: true
 directories:
