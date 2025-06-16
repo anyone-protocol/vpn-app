@@ -14,95 +14,112 @@ import { initializeState, state } from "./state";
 import log from 'electron-log/main';
 import path from "path";
 
-(async () => {
+// ---- SINGLE INSTANCE LOCK ----
+const gotTheLock = app.requestSingleInstanceLock();
 
-  app.setName("Anyone VPN");
-  log.initialize({ preload: true });
-  console.log = log.log;
-  const platform = process.platform;
-  if (process.platform === "darwin") {
-    app.setAboutPanelOptions({
-      applicationName: "Anyone VPN",
-      applicationVersion: "1.0.0",
-      copyright: "© 2023 Anyone VPN Inc.",
-      credits: "Developed by Anyone VPN Team",
-      iconPath: path.join(app.getAppPath(), "resources", "icon.png"),
-    });
-  }
-
-  await app.whenReady().then(() => {
-    createAppMenu();
-
-    if (platform === "darwin") {
-      const dockedIconPath = path.join(
-        app.getAppPath(),
-        "resources",
-        "icon.png"
-      );
-
-      app.dock.setIcon(dockedIconPath);
-      app.dock.setBadge("Anyone");
-
-      app.dock.show();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  let mainWindowRef = null;
+  app.on('second-instance', (_event, _argv, _workingDirectory) => {
+    // Someone tried to run a second instance, focus the main window.
+    if (mainWindowRef) {
+      if (mainWindowRef.isMinimized()) mainWindowRef.restore();
+      mainWindowRef.show();
+      mainWindowRef.focus();
     }
+  });
+
+  (async () => {
     app.setName("Anyone VPN");
-  });
+    log.initialize({ preload: true });
+    console.log = log.log;
+    const platform = process.platform;
+    if (process.platform === "darwin") {
+      app.setAboutPanelOptions({
+        applicationName: "Anyone VPN",
+        applicationVersion: "1.0.0",
+        copyright: "© 2023 Anyone VPN Inc.",
+        credits: "Developed by Anyone VPN Team",
+        iconPath: path.join(app.getAppPath(), "resources", "icon.png"),
+      });
+    }
 
-  app.name = "Anyone VPN";
+    await app.whenReady().then(() => {
+      createAppMenu();
 
-  // set the icon
-  // Initialize shared state
-  initializeState();
+      if (platform === "darwin") {
+        const dockedIconPath = path.join(
+          app.getAppPath(),
+          "resources",
+          "icon.png"
+        );
 
-  const mainWindow = createMainWindow();
-  // createTray(mainWindow);
-  CreateHTMLTray();
+        app.dock.setIcon(dockedIconPath);
+        app.dock.setBadge("Anyone");
 
-  // createTray(mainWindow);
-  setupIpcHandlers(mainWindow);
+        app.dock.show();
+      }
+      app.setName("Anyone VPN");
+    });
 
-  // Register global shortcuts
-  let menuBarVisible = false;
-  globalShortcut.register("CmdOrCtrl+Shift+M", () => {
-    menuBarVisible = !menuBarVisible;
-    mainWindow.setAutoHideMenuBar(!menuBarVisible);
-    mainWindow.setMenuBarVisibility(menuBarVisible);
-    console.log(`Menu bar is now ${menuBarVisible ? "visible" : "hidden"}`);
-  });
+    app.name = "Anyone VPN";
 
-  app.on("quit", async () => {
-    if (state.anon) {
+    // set the icon
+    // Initialize shared state
+    initializeState();
+
+    const mainWindow = createMainWindow();
+    mainWindowRef = mainWindow;
+    // createTray(mainWindow);
+    CreateHTMLTray();
+
+    // createTray(mainWindow);
+    setupIpcHandlers(mainWindow);
+
+    // Register global shortcuts
+    let menuBarVisible = false;
+    globalShortcut.register("CmdOrCtrl+Shift+M", () => {
+      menuBarVisible = !menuBarVisible;
+      mainWindow.setAutoHideMenuBar(!menuBarVisible);
+      mainWindow.setMenuBarVisibility(menuBarVisible);
+      console.log(`Menu bar is now ${menuBarVisible ? "visible" : "hidden"}`);
+    });
+
+    app.on("quit", async () => {
+      if (state.anon) {
+        setProxySettings(false, state.proxyPort);
+        state.isQuitting = true;
+        await stopAnyoneProxy();
+      }
+      console.log("All windows closed - quitting app");
+      app.quit();
+    });
+
+    // Handle application events
+    app.on("before-quit", async () => {
       setProxySettings(false, state.proxyPort);
-      state.isQuitting = true;
-      await stopAnyoneProxy();
-    }
-    console.log("All windows closed - quitting app");
-    app.quit();
-  });
+      if (state.anon) {
+        state.isQuitting = true;
 
-  // Handle application events
-  app.on("before-quit", async () => {
-    setProxySettings(false, state.proxyPort);
-    if (state.anon) {
-      state.isQuitting = true;
+        await stopAnyoneProxy();
+      }
+    });
 
-      await stopAnyoneProxy();
-    }
-  });
+    app.on("window-all-closed", async () => {
+      if (platform === "darwin") {
+        app.dock.hide();
+      }
+      mainWindow.hide();
+    });
 
-  app.on("window-all-closed", async () => {
-    if (platform === "darwin") {
-      app.dock.hide();
-    }
-    mainWindow.hide();
-  });
+    app.on("will-quit", () => {
+      globalShortcut.unregisterAll();
+    });
 
-  app.on("will-quit", () => {
-    globalShortcut.unregisterAll();
-  });
-
-  // Check for updates
-  checkForUpdates();
-})();
+    // Check for updates
+    checkForUpdates();
+  })();
+}
 
 export { app };
