@@ -120,7 +120,6 @@ export const CreateHTMLTray = () => {
   mb.on("ready", () => {
     state.tray = mb;
 
-    // Create context menu
     const contextMenu = Menu.buildFromTemplate([
       {
         label: "Quit",
@@ -134,12 +133,24 @@ export const CreateHTMLTray = () => {
       },
     ]);
 
-    // Set the context menu
-    mb.tray.setContextMenu(contextMenu);
+    // Show context menu only on right-click
+    mb.tray.on("right-click", () => {
+      mb.tray.popUpContextMenu(contextMenu);
+    });
 
+    // Optionally, handle left-click to show/hide your window
+    mb.tray.on("click", () => {
+      const mainWindow = state.mainWindow;
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+      }
+    });
+
+    // Keep double-click if you want
     mb.tray.on("double-click", () => {
       const mainWindow = state.mainWindow;
-      console.log(mainWindow.isVisible());
       if (mainWindow.isVisible()) {
         mainWindow.hide();
       } else {
