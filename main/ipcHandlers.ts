@@ -77,6 +77,15 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     return enabled;
   });
 
+  ipcMain.handle("get-show-animations", () => {
+    const showAnimations = store.get("showAnimations", true);
+    return showAnimations;
+  });
+
+  ipcMain.handle("set-show-animations", (_event, showAnimations: boolean) => {
+    store.set("showAnimations", showAnimations);
+  });
+
   ipcMain.handle("set-auto-update-preference", (_event, enabled: boolean) => {
     store.set("autoUpdateEnabled", enabled);
   });

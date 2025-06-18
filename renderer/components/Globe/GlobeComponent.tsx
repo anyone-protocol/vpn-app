@@ -5,13 +5,10 @@ import {
   Billboard,
   Line,
   OrbitControls,
-  OrbitControlsProps,
   Text,
 } from "@react-three/drei";
 import data from "../../assets/globe/grid.json";
-// import borders from "../../assets/globe/borders.json";
 import BackgroundSphere from "./BackgroundSphere"; // Adjust the path as necessary
-import { border } from "@chakra-ui/react";
 
 type Location = {
   lat: number;

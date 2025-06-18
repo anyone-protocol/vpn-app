@@ -45,6 +45,8 @@ interface AppContextType {
   windowSize: { width: number; height: number };
   screenSize: { width: number; height: number };
   appBooted: boolean;
+  showAnimations: boolean;
+  setShowAnimations: (showAnimations: boolean) => void;
 }
 
 interface GroupedProcessInfo {
@@ -89,6 +91,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
   const [proxyPort, setProxyPort] = useState<number>(9050); // Default proxy port - same as anon port (direct socks proxy without proxy chains)
   const [anyonePort, setAnyonePort] = useState<number>(9050); // Default anyone port
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [showAnimations, setShowAnimations] = useState<boolean>(true);
   const [relayLocationData, setRelayLocationData] = useState<
     Map<string, FingerPrintData>
   >(new Map());
@@ -167,6 +170,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
       setAppBooted(true);
     }
   };
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.ipc) {
+      window.ipc.getShowAnimations().then((showAnimations) => {
+        setShowAnimations(showAnimations);
+      });
+    }
+  }, [showAnimations]);
 
   useEffect(() => {
     // Update the ref whenever windowSize state changes
@@ -477,6 +488,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         handleEditProxyRule,
         handleDeleteProxyRule,
         appBooted,
+        showAnimations,
+        setShowAnimations,
       }}
     >
       {children}

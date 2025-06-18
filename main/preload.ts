@@ -1,8 +1,5 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
-import { ProcessInfo } from "./utils/getConnectedProcesses";
-import { hideSettingsWindow } from "./windows";
 import { RelayData } from "./state";
-import { FingerPrintData } from "./utils";
 import { ProxyRule } from "./proxy";
 
 const handler = {
@@ -192,6 +189,8 @@ const handler = {
   deleteProxyRule: (ruleId: string) => ipcRenderer.invoke("delete-proxy-rule", ruleId),
   getProxyRules: () => ipcRenderer.invoke("get-proxy-rules"),
   killAnonProcess: () => ipcRenderer.invoke("kill-anon-process"),
+  getShowAnimations: () => ipcRenderer.invoke("get-show-animations"),
+  setShowAnimations: (showAnimations: boolean) => ipcRenderer.invoke("set-show-animations", showAnimations),
 };
 
 contextBridge.exposeInMainWorld("ipc", handler);

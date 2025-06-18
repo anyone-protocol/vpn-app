@@ -13,6 +13,9 @@ import { useEffect, useState } from "react";
 import { GrUpdate } from "react-icons/gr";
 import { FaPowerOff } from "react-icons/fa6";
 
+import { useAppContext } from "../context/AppProvider";
+import { TbArrowsMoveHorizontal } from "react-icons/tb";
+
 export const SettingsComponent = ({
   headerBgColor,
 }: {
@@ -24,6 +27,7 @@ export const SettingsComponent = ({
   const [updateDownloaded, setUpdateDownloaded] = useState<boolean>(false);
   const [autoLaunchEnabled, setAutoLaunchEnabled] = useState<boolean>(false);
   const textColor = useColorModeValue("black", "#B7F2FB");
+  const { showAnimations, setShowAnimations } = useAppContext();
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.ipc) {
@@ -100,6 +104,60 @@ export const SettingsComponent = ({
   return (
     <>
       <Flex
+        align={"center"}
+        w="100%"
+        gap="5px"
+        p="14px 5px"
+        position="relative"
+      >
+        <Box
+          position="absolute"
+          bottom={0}
+          left={0}
+          width="100%"
+          height="1px"
+          background="linear-gradient(to right, rgba(22, 81, 103, 0), rgba(22, 81, 103, 0.8), rgba(22, 81, 103, 0))"
+        />
+        <Box w="16px" mt="0px">
+          <TbArrowsMoveHorizontal color="#27D7F2" size="16px" />
+        </Box>
+        <FormControl
+          display="flex"
+          alignItems="center"
+          justifyContent={"space-between"}
+          color={textColor}
+        >
+          <FormLabel
+            htmlFor="animations-toggle"
+            mb="0"
+            fontWeight="400"
+            fontSize="14px"
+            color={headerBgColor}
+          >
+            Enable Animations
+          </FormLabel>
+          <Switch
+            id="animations-toggle"
+            isChecked={showAnimations}
+            onChange={() => {
+              setShowAnimations(!showAnimations);
+              window.ipc.setShowAnimations(!showAnimations);
+            }}
+            sx={{
+              "span.chakra-switch__track": {
+                bg: "#558D91", // Off state color for track
+                _checked: {
+                  bg: "#27D7F2", // On state color for track
+                },
+              },
+              "span.chakra-switch__thumb": {
+                bg: "white", // Thumb color
+              },
+            }}
+          />
+        </FormControl>
+      </Flex>
+    <Flex
         align={"center"}
         w="100%"
         gap="5px"

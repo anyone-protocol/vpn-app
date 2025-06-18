@@ -4,6 +4,8 @@ import path from "path";
 import { createWindow } from "./helpers";
 import { isProd } from "./constants";
 import { state } from "./state";
+import Store from "electron-store";
+const store = new Store();
 
 export function createMainWindow(): BrowserWindow {
   let iconPath = path.join(app.getAppPath(), "resources", "icon.png");
@@ -158,9 +160,14 @@ export function expandMainWindow() {
   if (mainWindow) {
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width, height } = primaryDisplay.workAreaSize;
+    const showAnimations = store.get("showAnimations", true);
 
-    const newWidth = Math.max(Math.round(width * 0.8), 1024);
-    const newHeight = Math.max(Math.round(height * 0.8), 720);
+    const newWidth = showAnimations
+      ? Math.max(Math.round(width * 0.8), 1024)
+      : Math.max(Math.round(width * 0.5), 400);
+    const newHeight = showAnimations
+      ? Math.max(Math.round(height * 0.8), 720)
+      : Math.max(Math.round(height * 0.8), 700);
 
     mainWindow.setSize(newWidth, newHeight);
     mainWindow.center();

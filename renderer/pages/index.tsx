@@ -1,7 +1,6 @@
 // renderer/pages/index.tsx
 import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic"; // Import dynamic from Next.js
-
 import {
   Box,
   Stack,
@@ -15,7 +14,6 @@ import {
 import { useAppContext } from "../context/AppProvider";
 import { motion } from "framer-motion"; // Import framer-motion
 import { useRouter } from "next/router";
-import { is } from "@react-three/fiber/dist/declarations/src/core/utils";
 const AnimatedButton = dynamic(() => import("../components/AnimatedButton"), {
   ssr: false,
 });
@@ -47,7 +45,6 @@ function ExpandedHomePage() {
     appBooted,
     realIP,
     proxyIP,
-    relayData,
     realLocation,
     proxyLocation,
     relayLocation,
@@ -55,14 +52,11 @@ function ExpandedHomePage() {
     isLoading,
     groupedProcesses,
     connectionTime,
-    fetchInitialData,
     handleStartProxy,
     handleStopProxy,
-    isExpanded,
-    setIsExpanded,
-    windowSize,
     screenSize,
     numberOfRelays,
+    showAnimations,
   } = useAppContext();
 
   const bgColor = useColorModeValue("gray.100", "#18181B");
@@ -71,8 +65,6 @@ function ExpandedHomePage() {
   const headerTextColor = useColorModeValue("black", "white");
   const ipcCardText = useColorModeValue("teal.500", "#27D7F2");
   const menuTextColor = useColorModeValue("black", "white");
-
-  const router = useRouter();
 
   const mainContainerBgColor = useColorModeValue(
     "radial-gradient(164.53% 66.45% at 0% 100%, rgb(87 224 245 / 33%) 0%, rgb(0 0 0 / 13%) 100%), rgb(255 255 255 / 33%)",
@@ -268,6 +260,7 @@ function ExpandedHomePage() {
             </GridItem>
 
             {/* {realLocation && proxyLocation && relayLocation && proxyRunning && ( */}
+            {showAnimations && (
             <GridItem colSpan={1} rowSpan={1} overflowX={"visible"}>
               <Flex
                 justifyContent="center"
@@ -293,9 +286,10 @@ function ExpandedHomePage() {
                     enableOrbitControls={true}
                     initialZoom={5}
                   />
-                </Box>
-              </Flex>
-            </GridItem>
+                  </Box>
+                </Flex>
+              </GridItem>
+            )}
 
             {proxyLocation && (
               <GridItem

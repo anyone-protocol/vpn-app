@@ -120,6 +120,23 @@ export const CreateHTMLTray = () => {
   mb.on("ready", () => {
     state.tray = mb;
 
+    // Create context menu
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: "Quit",
+        click: async () => {
+          if (state.isProxyRunning) {
+            await stopAnyoneProxy();
+          }
+          setProxySettings(false, state.proxyPort);
+          app.quit();
+        },
+      },
+    ]);
+
+    // Set the context menu
+    mb.tray.setContextMenu(contextMenu);
+
     mb.tray.on("double-click", () => {
       const mainWindow = state.mainWindow;
       console.log(mainWindow.isVisible());
