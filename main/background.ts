@@ -1,7 +1,7 @@
 // src/main/background.ts
 process.title = "Anyone VPN";
 
-import { app, globalShortcut, nativeImage, Tray, Menu } from "electron";
+import { app, globalShortcut, nativeImage, Tray, Menu, dialog } from "electron";
 import { createMainWindow } from "./windows";
 import { createTray, CreateHTMLTray } from "./tray";
 import { setupIpcHandlers } from "./ipcHandlers";
@@ -13,6 +13,21 @@ import { createAppMenu } from "./app.menu";
 import { initializeState, state } from "./state";
 import log from 'electron-log/main';
 import path from "path";
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  dialog.showErrorBox(
+    'Whoops! An unexpected error occurred',
+    `An unexpected error occurred. Please try restarting the app.\nError details: ${error.message}`
+  );
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  dialog.showErrorBox(
+    'Whoops! An unexpected error occurred',
+    `An unexpected error occurred. Please try restarting the app.\nError details: ${reason?.message || reason}`
+  );
+});
 
 // ---- SINGLE INSTANCE LOCK ----
 const gotTheLock = app.requestSingleInstanceLock();
@@ -34,6 +49,7 @@ if (!gotTheLock) {
     app.setName("Anyone VPN");
     log.initialize({ preload: true });
     console.log = log.log;
+    console.error = log.error;
     const platform = process.platform;
     if (process.platform === "darwin") {
       app.setAboutPanelOptions({
@@ -101,7 +117,6 @@ if (!gotTheLock) {
       setProxySettings(false, state.proxyPort);
       if (state.anon) {
         state.isQuitting = true;
-
         await stopAnyoneProxy();
       }
     });

@@ -43,12 +43,13 @@ export async function startAnyoneProxy() {
     console.error("Error getting fingerprint to geo list:", error);
     state.mainWindow?.webContents.send(
       "proxy-error",
-      `Error getting fingerprint list: ${error.message}`
+      `\nWhoops! Something went wrong:\n ${error.message}`
     );
     state?.tray?.window?.webContents.send(
       "proxy-error",
-      `Error getting fingerprint list: ${error.message}`
+      `\nWhoops! Something went wrong:\n ${error.message}`
     );
+    return;
   }
 
   try {

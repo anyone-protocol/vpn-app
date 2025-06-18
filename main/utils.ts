@@ -14,56 +14,40 @@ export interface FingerPrintData {
   coordinates: {longitude: number, latitude: number};
 }
 
-export function getFingerPrintData(): Promise<Map<string, FingerPrintData> | null> {
-  // https://api.ec.anyone.tech/fingerprint-map
-  //example response
-  // {"001EFD3AAF2B651A08C7E04EBA4173F7CCC8B7F2": {
-  //   "hexId": "841f857ffffffff",
-  //   "coordinates": [48.588578255257, 7.74364013098359]
-  // }}
-  return new Promise((resolve) => {
-    const url = "https://api.ec.anyone.tech/fingerprint-map";
-    const options: any = {
-      method: "GET",
-    };
+export async function getFingerPrintData(): Promise<Map<string, FingerPrintData> | null> {
+  const url = "https://api.ec.anyone.tech/fingerprint-ma";
+  let lastError: any = null;
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.error(`Attempt ${attempt}: Error fetching fingerprint data:`, response.statusText);
+        lastError = new Error("Error fetching fingerprint data");
+        continue;
+      }
+      const json = await response.json();
 
-    const https = require("https");
-    const req = https.request(url, options, (res: any) => {
-      let data = "";
-      res.on("data", (chunk: any) => {
-        data += chunk;
-      });
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(data);
-
-          const fingerprintMap = new Map<string, FingerPrintData>();
-          for (const [key, value] of Object.entries(json)) {
-            const hexID = (value as any).hexId;
-            const coordinatesArray = (value as any).coordinates;
-            if (Array.isArray(coordinatesArray) && coordinatesArray.length === 2) {
-              const coordinates = {
-                latitude: coordinatesArray[0],
-                longitude: coordinatesArray[1],
-              };
-              fingerprintMap.set(key, { hexID, coordinates });
-            }
-          }
-
-          resolve(fingerprintMap);
-        } catch (error) {
-          throw new Error("Error parsing fingerprint data");
+      const fingerprintMap = new Map<string, FingerPrintData>();
+      for (const [key, value] of Object.entries(json)) {
+        const hexID = (value as any).hexId;
+        const coordinatesArray = (value as any).coordinates;
+        if (Array.isArray(coordinatesArray) && coordinatesArray.length === 2) {
+          const coordinates = {
+            latitude: coordinatesArray[0],
+            longitude: coordinatesArray[1],
+          };
+          fingerprintMap.set(key, { hexID, coordinates });
         }
-      });
-    });
-
-    req.on("error", (error: any) => {
-      console.error("Error fetching fingerprint data:", error);
-      throw new Error("Error fetching fingerprint data");
-    });
-
-    req.end();
-  });
+      }
+      return fingerprintMap;
+    } catch (error) {
+      console.error(`Attempt ${attempt}: Error fetching or parsing fingerprint data:`, error);
+      lastError = error;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+  throw lastError;
 }
 
 export function checkIP(useProxy: boolean): Promise<string | null> {
