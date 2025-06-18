@@ -1,19 +1,18 @@
 // renderer/pages/index.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import dynamic from "next/dynamic"; // Import dynamic from Next.js
 import {
   Box,
   Stack,
   useColorModeValue,
   Flex,
-  useColorMode,
   Grid,
   GridItem,
   Button,
 } from "@chakra-ui/react";
 import { useAppContext } from "../context/AppProvider";
 import { motion } from "framer-motion"; // Import framer-motion
-import { useRouter } from "next/router";
+
 const AnimatedButton = dynamic(() => import("../components/AnimatedButton"), {
   ssr: false,
 });

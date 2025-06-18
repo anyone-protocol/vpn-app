@@ -2,11 +2,14 @@ import { useEffect, useRef } from "react";
 import lottie from "lottie-web";
 import anyoneBg from "../../assets/Anyone-logo-animation.json";
 import { Box } from "@chakra-ui/react";
+import { useAppContext } from "../../context/AppProvider";
 
 const BgAnimations = ({ autoplay = true, loop = true, expanded }) => {
+  const { showAnimations } = useAppContext();
   const animationContainer = useRef(null);
 
   useEffect(() => {
+    if (showAnimations) {
     lottie
       .loadAnimation({
         container: animationContainer.current,
@@ -16,6 +19,17 @@ const BgAnimations = ({ autoplay = true, loop = true, expanded }) => {
         animationData: anyoneBg,
       })
       .setSpeed(0.2);
+    } else {
+      lottie
+      .loadAnimation({
+        container: animationContainer.current,
+        renderer: "svg",
+        loop: false,
+        autoplay: autoplay,
+        animationData: anyoneBg,
+        })
+        .setSpeed(0.2);
+    }
   }, []);
 
   return (
