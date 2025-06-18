@@ -306,9 +306,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({
         setGroupedProcesses([]);
       });
 
-      const removeProxyErrorListener = window.ipc.onProxyError((message) => {
+      const removeProxyErrorListener = window.ipc.onProxyError(async (message) => {
         setIsLoading(false);
-        alert(`Proxy Error: ${message}`);
+        const isTray = typeof window !== "undefined" && window.location.pathname.includes("tray");
+        if (isTray) {
+          // Only show alert if main window is minimized
+          const minimized = await window.ipc.isMainWindowMinimized();
+          if (minimized) {
+            alert(`Proxy Error: ${message}`);
+          }
+        } else {
+          alert(`Proxy Error: ${message}`);
+        }
       });
 
       const removeAnonRunningErrorListener = window.ipc.onAnonRunningError(async (message) => {

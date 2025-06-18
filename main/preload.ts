@@ -191,6 +191,7 @@ const handler = {
   killAnonProcess: () => ipcRenderer.invoke("kill-anon-process"),
   getShowAnimations: () => ipcRenderer.invoke("get-show-animations"),
   setShowAnimations: (showAnimations: boolean) => ipcRenderer.invoke("set-show-animations", showAnimations),
+  isMainWindowMinimized: () => ipcRenderer.invoke("is-main-window-minimized"),
 };
 
 contextBridge.exposeInMainWorld("ipc", handler);

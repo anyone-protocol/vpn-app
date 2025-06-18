@@ -294,4 +294,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
       throw error;
     }
   });
+
+  ipcMain.handle("is-main-window-minimized", () => {
+    return mainWindow.isMinimized();
+  });
 }
