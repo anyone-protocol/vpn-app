@@ -1,7 +1,20 @@
 // src/main/systemProxy.ts
 import { exec } from "child_process";
+import { promisify } from "util";
 
-export function setProxySettings(enable: boolean, proxyPort: number) {
+const execAsync = promisify(exec);
+
+async function getNetworkInterfaces(): Promise<string[]> {
+  try {
+    const { stdout } = await execAsync('networksetup -listnetworkserviceorder | grep -E "Wi-Fi|LAN" | cut -d")" -f2 | tr -d " "');
+    return stdout.trim().split('\n').filter(networkInterface => networkInterface.trim().length > 0);
+  } catch (error) {
+    console.error('Error getting network interfaces:', error);
+    return ['Wi-Fi']; // fallback to Wi-Fi if command fails
+  }
+}
+
+export async function setProxySettings(enable: boolean, proxyPort: number) {
   const platform = process.platform;
   const proxyAddress = `127.0.0.1:${proxyPort}`;
 
@@ -20,15 +33,22 @@ export function setProxySettings(enable: boolean, proxyPort: number) {
       console.log("Proxy has been disabled.");
     }
   } else if (platform === "darwin") {
-    const networkInterface = "Wi-Fi";
+    try {
+      const networkInterfaces = await getNetworkInterfaces();
+      console.log(`Found network interfaces: ${networkInterfaces.join(', ')}`);
 
-    if (enable) {
-      exec(`networksetup -setsocksfirewallproxy "${networkInterface}" 127.0.0.1 ${proxyPort}`);
-      exec(`networksetup -setsocksfirewallproxystate "${networkInterface}" on`);
-      console.log("Proxy has been enabled.");
-    } else {
-      exec(`networksetup -setsocksfirewallproxystate "${networkInterface}" off`);
-      console.log("Proxy has been disabled.");
+      for (const networkInterface of networkInterfaces) {
+        if (enable) {
+          await execAsync(`networksetup -setsocksfirewallproxy "${networkInterface}" 127.0.0.1 ${proxyPort}`);
+          await execAsync(`networksetup -setsocksfirewallproxystate "${networkInterface}" on`);
+          console.log(`Proxy has been enabled for ${networkInterface}.`);
+        } else {
+          await execAsync(`networksetup -setsocksfirewallproxystate "${networkInterface}" off`);
+          console.log(`Proxy has been disabled for ${networkInterface}.`);
+        }
+      }
+    } catch (error) {
+      console.error('Error setting proxy for network interfaces:', error);
     }
   } else if (platform === "linux") {
     if (enable) {

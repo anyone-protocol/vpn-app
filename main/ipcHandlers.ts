@@ -166,7 +166,7 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
   ipcMain.handle("quit-app", async () => {
     state.isQuitting = true;
-    setProxySettings(false, state.proxyPort);
+    await setProxySettings(false, state.proxyPort);
     await stopAnyoneProxy();
     state.tray.app.quit();
     state.tray.app.exit();

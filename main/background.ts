@@ -3,7 +3,7 @@ process.title = "Anyone VPN";
 
 import { app, globalShortcut, nativeImage, Tray, Menu, dialog } from "electron";
 import { createMainWindow } from "./windows";
-import { createTray, CreateHTMLTray } from "./tray";
+import { CreateHTMLTray } from "./tray";
 import { setupIpcHandlers } from "./ipcHandlers";
 import { checkForUpdates } from "./updater";
 import { stopAnyoneProxy } from "./proxy";
@@ -104,7 +104,7 @@ if (!gotTheLock) {
 
     app.on("quit", async () => {
       if (state.anon) {
-        setProxySettings(false, state.proxyPort);
+        await setProxySettings(false, state.proxyPort);
         state.isQuitting = true;
         await stopAnyoneProxy();
       }
@@ -114,7 +114,7 @@ if (!gotTheLock) {
 
     // Handle application events
     app.on("before-quit", async () => {
-      setProxySettings(false, state.proxyPort);
+      await setProxySettings(false, state.proxyPort);
       if (state.anon) {
         state.isQuitting = true;
         await stopAnyoneProxy();

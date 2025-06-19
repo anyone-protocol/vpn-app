@@ -127,7 +127,7 @@ export const CreateHTMLTray = () => {
           if (state.isProxyRunning) {
             await stopAnyoneProxy();
           }
-          setProxySettings(false, state.proxyPort);
+          await setProxySettings(false, state.proxyPort);
           app.quit();
         },
       },

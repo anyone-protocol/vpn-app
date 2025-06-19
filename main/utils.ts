@@ -15,7 +15,7 @@ export interface FingerPrintData {
 }
 
 export async function getFingerPrintData(): Promise<Map<string, FingerPrintData> | null> {
-  const url = "https://api.ec.anyone.tech/fingerprint-ma";
+  const url = "https://api.ec.anyone.tech/fingerprint-map";
   let lastError: any = null;
   const MAX_ATTEMPTS = 3;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
