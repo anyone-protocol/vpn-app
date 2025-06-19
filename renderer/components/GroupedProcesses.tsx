@@ -95,7 +95,7 @@ const GroupedProcesses: React.FC<GroupedProcessesProps> = ({
           w="100%"
           borderBottom="1px solid #1c2f30"
           maxH={"750px"}
-          overflowY={"scroll"}
+          overflowY={"hidden"}
         >
           <Box w="100%" zIndex={1}>
             <motion.div
@@ -107,7 +107,7 @@ const GroupedProcesses: React.FC<GroupedProcessesProps> = ({
                 ease: "easeInOut",
               }}
             >
-              <Accordion allowMultiple overflowY={"auto"} overflowX="hidden">
+              <Accordion allowMultiple overflowX="hidden">
                 {uniqueGroupedProcesses.map((proc, index) => (
                   <AccordionItem
                     key={index}
