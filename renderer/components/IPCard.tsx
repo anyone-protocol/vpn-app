@@ -20,7 +20,7 @@ import { TbCopy, TbCopyCheck } from "react-icons/tb";
 import { useState, useRef } from "react";
 import { useAppContext } from "../context/AppProvider";
 import { ipcMain } from "electron";
-import { IoInformationCircleOutline } from "react-icons/io5";
+import { MdSecurity, MdRule, MdAdd } from "react-icons/md";
 import { FiSettings } from "react-icons/fi";
 import { SlArrowRight } from "react-icons/sl";
 import { SlArrowLeft } from "react-icons/sl";
@@ -202,11 +202,11 @@ const IPCard: React.FC<IPCardProps> = ({
 
         <Flex gap={2}>
           <Button size="sm" onClick={onOpen} colorScheme="">
-            <IoInformationCircleOutline color={menuTextColor} />
+            <FiSettings color={menuTextColor} />
           </Button>
 
           <Button size="sm" onClick={onSettingsOpen} colorScheme="">
-            <FiSettings color={menuTextColor} />
+            <MdSecurity color={menuTextColor} />
           </Button>
 
           {expanded ? (
@@ -302,6 +302,7 @@ const IPCard: React.FC<IPCardProps> = ({
                 size="md"
                 onClick={onAddRuleOpen}
                 disabled={proxyRunning}
+                leftIcon={<MdAdd />}
               >
                 Add New Rule
               </Button>
