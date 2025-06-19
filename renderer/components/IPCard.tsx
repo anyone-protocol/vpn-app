@@ -306,6 +306,12 @@ const IPCard: React.FC<IPCardProps> = ({
               >
                 Add New Rule
               </Button>
+              
+              {proxyRunning && (
+                <Text fontSize="sm" color="gray.500" textAlign="center">
+                  Rules are disabled while proxy is running.
+                </Text>
+              )}
 
               {proxyRules.map((rule) => (
                 <RuleBox
