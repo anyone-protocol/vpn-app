@@ -8,6 +8,7 @@ import { getRelayData } from "./proxy";
 const store = new Store();
 
 export function checkForUpdates() {
+  return;
   const autoUpdateEnabled = store.get("autoUpdateEnabled", true);
   autoUpdater.autoDownload = autoUpdateEnabled as boolean;
   autoUpdater.checkForUpdates();

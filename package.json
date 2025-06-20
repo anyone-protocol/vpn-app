@@ -25,7 +25,10 @@
     "forge:notarize": "electron-forge publish --dry-run --platform=darwin --arch=arm64 --make-only-notarize",
     "forge:build:mac": "electron-forge make --platform=darwin --arch=arm64",
     "forge:build:mac:x64": "electron-forge make --platform=darwin --arch=x64",
-    "forge:build:win": "electron-forge make --platform=win32 --arch=x64"
+    "forge:build:win": "electron-forge make --platform=win32 --arch=x64",
+    "forge:package:mac": "electron-forge package --platform=darwin --arch=arm64",
+    "create:dmg": "node scripts/create-dmg.js",
+    "build:mac:with-dmg": "npm run forge:package:mac && npm run create:dmg"
   },
   "dependencies": {
     "@anyone-protocol/anyone-client": "^1.0.0-beta.5",
@@ -48,7 +51,7 @@
     "@chakra-ui/react": "^2.9.3",
     "@chakra-ui/theme-tools": "^2.1.2",
     "@electron-forge/cli": "^7.8.0",
-    "@electron-forge/maker-dmg": "^7.8.0",
+    "@electron-forge/maker-dmg": "^7.8.1",
     "@electron-forge/maker-zip": "^7.8.0",
     "@electron-forge/plugin-auto-unpack-natives": "^7.8.0",
     "@electron/notarize": "^2.5.0",
@@ -76,13 +79,6 @@
     "react-icons": "^5.3.0",
     "typescript": "^5.4.5"
   },
-  "publish": [
-    {
-      "provider": "github",
-      "owner": "malicemandar",
-      "repo": "Anyone-Desktop"
-    }
-  ],
   "build": {
     "asar": true,
     "asarUnpack": [
