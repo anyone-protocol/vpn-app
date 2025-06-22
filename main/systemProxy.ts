@@ -6,7 +6,7 @@ const execAsync = promisify(exec);
 
 async function getNetworkInterfaces(): Promise<string[]> {
   try {
-    const { stdout } = await execAsync('networksetup -listnetworkserviceorder | grep -E "Wi-Fi|LAN" | cut -d")" -f2 | tr -d " "');
+    const { stdout } = await execAsync('networksetup -listnetworkserviceorder | grep -B1 "Hardware Port: \\(Wi-Fi\\|.*LAN\\)" | grep "^([0-9*])" | sed \'s/^([0-9*]*) //\'');
     return stdout.trim().split('\n').filter(networkInterface => networkInterface.trim().length > 0);
   } catch (error) {
     console.error('Error getting network interfaces:', error);
