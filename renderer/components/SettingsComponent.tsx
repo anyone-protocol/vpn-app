@@ -134,7 +134,7 @@ export const SettingsComponent = ({
             fontSize="14px"
             color={headerBgColor}
           >
-            Enable Animations
+            Globe Animations
           </FormLabel>
           <Switch
             id="animations-toggle"
@@ -208,7 +208,7 @@ export const SettingsComponent = ({
           />
         </FormControl>
       </Flex>
-      {updateStatus && (
+      {/* {updateStatus && (
         <Text mt={2} color="#558D91">
           {updateStatus}
         </Text>
@@ -217,7 +217,7 @@ export const SettingsComponent = ({
         <Button onClick={handleDownloadUpdate} mt={2}>
           Download Update
         </Button>
-      )}
+      )} */}
       {updateDownloaded && (
         <Button onClick={handleInstallUpdate} mt={2}>
           Install Update

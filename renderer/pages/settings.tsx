@@ -304,7 +304,7 @@ function SettingsPage() {
                         mb="0"
                         fontSize="18px"
                       >
-                        Enable Animations
+                        Globe Animations
                       </FormLabel>
                       <Switch
                         id="animations-toggle"
@@ -376,12 +376,12 @@ function SettingsPage() {
                       />
                     </FormControl>
                   </Flex>
-                  {updateStatus && (
+                  {/* {updateStatus && (
                     <Text mt={2} color="#558D91">
                       {updateStatus}
                     </Text>
-                  )}
-                  {!autoUpdateEnabled && updateAvailable && (
+                  )} */}
+                  {/* {!autoUpdateEnabled && updateAvailable && (
                     <Button onClick={handleDownloadUpdate} mt={2}>
                       Download Update
                     </Button>
@@ -390,7 +390,7 @@ function SettingsPage() {
                     <Button onClick={handleInstallUpdate} mt={2}>
                       Install Update
                     </Button>
-                  )}
+                  )} */}
 
                   <Flex
                     align={"center"}
