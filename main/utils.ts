@@ -50,54 +50,52 @@ export async function getFingerPrintData(): Promise<Map<string, FingerPrintData>
   throw lastError;
 }
 
-export function checkIP(useProxy: boolean): Promise<string | null> {
-  return new Promise((resolve) => {
-    const url = "https://api.ipify.org?format=json";
+export async function checkIP(useProxy: boolean): Promise<string | null> {
+  const url = "https://api.ipify.org?format=json";
+  const MAX_ATTEMPTS = 3;
 
-    if (useProxy) {
-      state.anonSocksClient.get(url)
-        .then(response => {
-          try {
-            resolve(response.data.ip);
-          } catch (error) {
-            console.error("Error parsing IP response:", error);
-            resolve(null);
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      if (useProxy) {
+        try {
+          const response = await state.anonSocksClient.get(url);
+          if (response.data && response.data.ip) {
+            return response.data.ip;
           }
-        })
-        .catch(error => {
-          console.error("Error fetching IP address:", error);
-          resolve(null);
-        });
-    } else {
-      const options: any = {
-        method: "GET",
-      };
-
-      const https = require("https");
-      const req = https.request(url, options, (res: any) => {
-        let data = "";
-        res.on("data", (chunk: any) => {
-          data += chunk;
-        });
-        res.on("end", () => {
-          try {
-            const json = JSON.parse(data);
-            resolve(json.ip);
-          } catch (error) {
-            console.error("Error parsing IP response:", error);
-            resolve(null);
+        } catch (error) {
+          console.error(`Attempt ${attempt}: Error parsing IP response:`, error);
+          if (attempt < MAX_ATTEMPTS) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
           }
-        });
-      });
-
-      req.on("error", (error: any) => {
-        console.error("Error fetching IP address:", error);
-        resolve(null);
-      });
-
-      req.end();
+          return null;
+        }
+      } else {
+        const response = await fetch(url);
+        if (!response.ok) {
+          console.error(`Attempt ${attempt}: Error fetching IP address:`, response.statusText);
+          if (attempt < MAX_ATTEMPTS) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+          return null;
+        }
+        const data = await response.json();
+        if (data && data.ip) {
+          return data.ip;
+        }
+      }
+    } catch (error) {
+      console.error(`Attempt ${attempt}: Error fetching IP address:`, error);
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } else {
+        return null;
+      }
     }
-  });
+  }
+  
+  return null;
 }
 
 export async function getGeolocation(ip: string) {
