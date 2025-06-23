@@ -1,5 +1,10 @@
-import React from "react";
-import { Box, Text, Circle } from "@chakra-ui/react";
+import React, { useState, useEffect } from "react";
+import {
+  Box,
+  Text,
+  Circle,
+  Progress,
+} from "@chakra-ui/react";
 import MinimizedMapComponent from "./MinimizedMapComponent";
 
 interface LocationData {
@@ -10,6 +15,7 @@ interface LocationData {
   country: string;
   countryCode: string;
 }
+
 interface ProxyStatusProps {
   appBooted: boolean;
   isLoading: boolean;
@@ -54,8 +60,47 @@ const ProxyStatus: React.FC<ProxyStatusProps> = ({
   showCountries,
   numberOfRelays,
 }) => {
+  const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState("");
+  const [showProgress, setShowProgress] = useState(false);
   const [hovered, setHovered] = React.useState(false);
-  console.log(appBooted, "appBooted");
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.ipc) {
+      const removeProgressListener = window.ipc.onProxyProgress(
+        (progress: number, message: string) => {
+          setProgress(progress);
+          setProgressMessage(message);
+          setShowProgress(true);
+        }
+      );
+
+      const removeStartedListener = window.ipc.onProxyStarted(() => {
+        setShowProgress(false);
+        setProgress(0);
+        setProgressMessage("");
+      });
+
+      const removeStoppedListener = window.ipc.onProxyStopped(() => {
+        setShowProgress(false);
+        setProgress(0);
+        setProgressMessage("");
+      });
+
+      const removeErrorListener = window.ipc.onProxyError(() => {
+        setShowProgress(false);
+        setProgress(0);
+        setProgressMessage("");
+      });
+
+      return () => {
+        removeProgressListener();
+        removeStartedListener();
+        removeStoppedListener();
+        removeErrorListener();
+      };
+    }
+  }, []);
 
   const statusText = !appBooted
     ? "App starting"
@@ -106,6 +151,7 @@ const ProxyStatus: React.FC<ProxyStatusProps> = ({
         height="1px" // Height of the border
         background="linear-gradient(to right, rgba(22, 81, 103, 0), rgba(22, 81, 103, 0.8), rgba(22, 81, 103, 0))"
       />
+
       <Box
         display="flex"
         alignItems="center"
@@ -121,6 +167,34 @@ const ProxyStatus: React.FC<ProxyStatusProps> = ({
           {statusText}
         </Text>
       </Box>
+
+      {/* Progress Bar */}
+      {showProgress && (
+        <Box mb={1} display="flex" alignItems="center" justifyContent="center" flexDirection="column">
+          <Progress
+            value={progress}
+            size="sm"
+            mt={2}
+            borderRadius="full"
+            width="90%"
+            isAnimated
+            bg="rgba(255, 255, 255, 0.05)"
+            sx={{
+              '& > div': {
+                background: 'linear-gradient(90deg, #00d4aa 0%, #00b4d8 50%, #0077b6 100%)',
+                boxShadow: '0 0 15px rgba(0, 212, 170, 0.4)',
+                borderRadius: 'full',
+              }
+            }}
+          />
+          <Text fontSize="xs" mt={2} textAlign="center" color={menuTextColor} fontWeight="medium">
+            {progressMessage}
+          </Text>
+          <Text fontSize="xs" mt={1} textAlign="center" color="gray.400">
+            {progress}%
+          </Text>
+        </Box>
+      )}
 
       {/* Timer Display */}
       {proxyRunning && !isLoading && (

@@ -103,6 +103,23 @@ const handler = {
     };
   },
 
+  onProxyProgress(callback: (progress: number, message: string) => void) {
+    const subscription = (_event: IpcRendererEvent, progress: number, message: string) => callback(progress, message);
+    ipcRenderer.on("proxy-progress", subscription);
+    return () => {
+      ipcRenderer.removeListener("proxy-progress", subscription);
+    };
+  },
+
+  onProxyComplete(callback: (complete: boolean) => void) {
+    const subscription = (_event: IpcRendererEvent, complete: boolean) => callback(complete);
+    ipcRenderer.on("proxy-complete", subscription);
+    return () => {
+      ipcRenderer.removeListener("proxy-complete", subscription);
+    };
+  },
+
+
   // window-resize
   onWindowResize: (callback: (height: number, width: number) => void) => {
     const subscription = (_event: IpcRendererEvent, height: number, width: number) => {

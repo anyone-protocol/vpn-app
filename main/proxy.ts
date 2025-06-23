@@ -3,7 +3,8 @@ import {
   Process,
   Socks,
   Control,
-  AnonRunningError
+  AnonRunningError,
+  BootstrapProgressEvent
 } from "@anyone-protocol/anyone-client";
 import {
   startProxy as startPrivoxy,
@@ -87,6 +88,19 @@ export async function startAnyoneProxy() {
       );
     }
 
+    state.anon.on('bootstrap-progress', (event: BootstrapProgressEvent) => {
+      console.log(`Bootstrap progress: ${event.percentage}% - ${event.status}`);
+      state.mainWindow?.webContents.send("proxy-progress", event.percentage, event.status);
+      state.tray?.window?.webContents.send("proxy-progress", event.percentage, event.status);
+    });
+    
+    // Listen to bootstrap complete event
+    state.anon.on('bootstrap-complete', (event) => {
+        console.log('Bootstrap complete');
+        state.mainWindow?.webContents.send("proxy-complete", { complete: true });
+        state.tray?.window?.webContents.send("proxy-complete", { complete: true });
+    });
+
     state.anonPort = state.anon.getSOCKSPort();
     state.anonControlPort = state.anon.getControlPort();
 
@@ -94,6 +108,7 @@ export async function startAnyoneProxy() {
 
     try {
       await state.anon.start();
+
     } catch (error) {
       if (error instanceof AnonRunningError) {
         console.log("Anyone process is already running");
@@ -103,6 +118,9 @@ export async function startAnyoneProxy() {
         );
       } else {
         console.error("Error starting Anyone process:", error);
+        if (error.message.includes("60 seconds")) {
+          return;
+        }
         state.mainWindow?.webContents.send(
           "proxy-error",
             `Error starting Anyone process: ${error.message}`
