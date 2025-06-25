@@ -51,6 +51,7 @@ export async function getFingerPrintData(): Promise<Map<string, FingerPrintData>
 }
 
 export async function checkIP(useProxy: boolean): Promise<string | null> {
+  console.log("Checking IP idk where from");
   const url = "https://api.ipify.org?format=json";
   const MAX_ATTEMPTS = 3;
 

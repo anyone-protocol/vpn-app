@@ -159,7 +159,10 @@ export async function startAnyoneProxy() {
     state.relayData = relayData;
     state.numberOfRelays = relayData.numberOfRelays;
 
-    // await createRoutingMap();
+    await createRoutingMap(); // THIS IS WHERE THE ROUTUING MAP IS CREATED
+
+    // Start circuit monitoring
+    await startCircuitMonitoring();
 
     state.mainWindow?.webContents.send("proxy-started");
     state.tray?.window?.webContents.send("proxy-started");
@@ -195,7 +198,7 @@ export async function getRelayData() {
 
   while (circuitRetries > 0) {
     try {
-      const circuits = await state.anonControlClient.circuitStatus();
+      const circuits = await getCircuitStatusWithRetry();
       console.log('Got circuit status');
       
       // If we get here, we successfully got the circuit status
@@ -262,6 +265,13 @@ export async function stopAnyoneProxy() {
     console.log("Anyone proxy is not running.");
     return;
   }
+  
+  // Stop circuit monitoring
+  if (state.circuitMonitorInterval) {
+    clearInterval(state.circuitMonitorInterval);
+    state.circuitMonitorInterval = null;
+  }
+  
   setProxySettings(false, state.proxyPort);
   if (state.anonControlClient) {
     state.anonControlClient.end();
@@ -294,6 +304,234 @@ export async function stopAnyoneProxy() {
     state.anon = null;
     state.anonSocksClient = null;
   }
+}
+
+// Circuit failure detection and handling
+async function handleCircuitFailure(failedCircuitId: string, target: string) {
+  console.log(`Handling circuit failure for circuit ${failedCircuitId} targeting ${target}`);
+  
+  try {
+    // Remove the failed circuit from routing map if it exists
+    const targetAddress = target.split(':')[0];
+    if (state.routingMap[targetAddress] === parseInt(failedCircuitId)) {
+      
+      delete state.routingMap[targetAddress];
+      console.log(`Removed failed circuit ${failedCircuitId} from routing map for ${targetAddress}`);
+      
+      // Notify UI about circuit failure
+      state.mainWindow?.webContents.send("circuit-failure", {
+        circuitId: failedCircuitId,
+        target: targetAddress,
+        timestamp: new Date().toISOString()
+      });
+      state.tray?.window?.webContents.send("circuit-failure", {
+        circuitId: failedCircuitId,
+        target: targetAddress,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Attempt to recreate the circuit
+      await recreateCircuitForTarget(targetAddress);
+    }
+  } catch (error) {
+    console.error(`Error handling circuit failure for ${failedCircuitId}:`, error);
+  }
+}
+
+// Recreate circuit for a specific target
+async function recreateCircuitForTarget(targetAddress: string) {
+  try {
+    const route = state.proxyRuleConfig.routings.find(r => r.targetAddress === targetAddress);
+    if (!route) {
+      console.error(`No route configuration found for ${targetAddress}`);
+      return;
+    }
+    
+    console.log(`Recreating circuit for ${targetAddress}`);
+    
+    // Get fresh relay lists
+    const relays = await state.anonControlClient.getRelays();
+    let exits = state.anonControlClient.filterRelaysByFlags(relays, Flag.Exit);
+    let guards = state.anonControlClient.filterRelaysByFlags(relays, Flag.Guard);
+    let middleRelays = state.anonControlClient.filterRelaysByFlags(relays, Flag.Stable)
+      .filter(relay => 
+        relay.flags.includes(Flag.Stable) &&
+        relay.flags.includes(Flag.Running) &&
+        !relay.flags.includes(Flag.Exit) &&
+        !relay.flags.includes(Flag.Guard)
+      );
+    
+    // Filter out bad exits
+    exits = exits.filter((exit) => !exit.flags.includes(Flag.BadExit));
+    
+    // Get exit node based on country requirements
+    const exitsByCountry = exits.filter((exit) => 
+      route.exitCountries.some((country) => exit.country?.toLowerCase() === country.toLowerCase())
+    );
+    
+    if (exitsByCountry.length === 0) {
+      console.error(`No exits found for countries: ${route.exitCountries.join(', ')}`);
+      return;
+    }
+    
+    const exit = exitsByCountry[Math.floor(Math.random() * exitsByCountry.length)];
+    const guard = guards[Math.floor(Math.random() * guards.length)];
+    
+    // Create new path
+    const path = [guard.fingerprint];
+    for (let i = 0; i < route.hops - 2; i++) {
+      const availableMiddleRelays = middleRelays.filter(relay => 
+        !path.includes(relay.fingerprint)
+      );
+      
+      if (availableMiddleRelays.length === 0) {
+        console.error('No available middle relays for path');
+        return;
+      }
+      
+      const middle = availableMiddleRelays[Math.floor(Math.random() * availableMiddleRelays.length)];
+      path.push(middle.fingerprint);
+    }
+    path.push(exit.fingerprint);
+    
+    const options: ExtendCircuitOptions = {
+      circuitId: 0,
+      serverSpecs: path,
+      purpose: "general",
+      awaitBuild: true
+    };
+    
+    const newCircuitId = await state.anonControlClient.extendCircuit(options);
+    state.routingMap[targetAddress] = newCircuitId;
+    
+    console.log(`Successfully recreated circuit ${newCircuitId} for ${targetAddress}`);
+    
+    // Notify UI about circuit recreation
+    state.mainWindow?.webContents.send("circuit-recreated", {
+      oldCircuitId: targetAddress,
+      newCircuitId: newCircuitId,
+      target: targetAddress,
+      timestamp: new Date().toISOString()
+    });
+    state.tray?.window?.webContents.send("circuit-recreated", {
+      oldCircuitId: targetAddress,
+      newCircuitId: newCircuitId,
+      target: targetAddress,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error(`Failed to recreate circuit for ${targetAddress}:`, error);
+  }
+}
+
+// Robust circuit status checking with retries
+async function getCircuitStatusWithRetry(maxRetries: number = 3): Promise<any[]> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const circuits = await state.anonControlClient.circuitStatus();
+      return circuits;
+    } catch (error) {
+      console.log(`Circuit status attempt ${attempt}/${maxRetries} failed:`, error.message);
+      
+      if (error.message.includes('Invalid response format')) {
+        if (attempt === maxRetries) {
+          console.log('Max retries reached for circuit status, returning empty array');
+          return [];
+        }
+        // Wait a bit before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+      
+      if (error.message.includes('Connection refused') || error.message.includes('ECONNREFUSED')) {
+        console.log('Control connection lost, attempting to reconnect...');
+        try {
+          await state.anonControlClient.authenticate();
+          console.log('Control connection re-established, retrying circuit status');
+          // Try again after reconnection
+          const circuits = await state.anonControlClient.circuitStatus();
+          return circuits;
+        } catch (reconnectError) {
+          console.error('Failed to reconnect:', reconnectError);
+          if (attempt === maxRetries) {
+            throw new Error('Failed to reconnect control client after multiple attempts');
+          }
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          continue;
+        }
+      }
+      
+      // For other errors, throw immediately
+      throw error;
+    }
+  }
+  
+  return [];
+}
+
+// Periodic circuit health monitoring
+async function startCircuitMonitoring() {
+  const monitorInterval = setInterval(async () => {
+    if (!state.isProxyRunning || !state.anonControlClient) {
+      clearInterval(monitorInterval);
+      return;
+    }
+    
+    console.log('Checking circuit status');
+    try {
+      const circuits = await getCircuitStatusWithRetry();
+      const failedCircuits = circuits.filter(circuit => 
+        circuit.state === 'FAILED' || circuit.state === 'CLOSED'
+      );
+      if (failedCircuits.length > 0) {
+        console.log(`Found ${failedCircuits.length} failed/closed circuits:`, failedCircuits.map(c => c.circuitId));
+        
+        for (const failedCircuit of failedCircuits) {
+          // Find which target this circuit was serving
+          const targetAddress = Object.keys(state.routingMap).find(
+            target => state.routingMap[target] === failedCircuit.circuitId
+          );
+          
+          if (targetAddress) {
+            console.log(`Circuit ${failedCircuit.circuitId} failed for target ${targetAddress}`);
+            await handleCircuitFailure(failedCircuit.circuitId.toString(), targetAddress);
+          }
+
+        }
+      }
+    } catch (error) {
+      console.error('Error in circuit monitoring:', error);
+      
+      // Handle specific error types
+      if (error.message.includes('Invalid response format')) {
+        console.log('Control connection may be unstable, will retry on next interval');
+        // Don't throw - just log and continue monitoring
+        return;
+      }
+      
+      if (error.message.includes('Connection refused') || error.message.includes('ECONNREFUSED')) {
+        console.log('Control connection lost, attempting to reconnect...');
+        try {
+          // Try to re-authenticate the control connection
+          await state.anonControlClient.authenticate();
+          console.log('Control connection re-established');
+        } catch (reconnectError) {
+          console.error('Failed to reconnect control client:', reconnectError);
+          // If we can't reconnect, the proxy might need to be restarted
+          state.mainWindow?.webContents.send("proxy-error", "Control connection lost. Please restart the proxy.");
+          state.tray?.window?.webContents.send("proxy-error", "Control connection lost. Please restart the proxy.");
+        }
+        return;
+      }
+      
+      // For other errors, log but don't stop monitoring
+      console.log('Circuit monitoring will continue despite error');
+    }
+  }, 5000); // Check every 5 seconds
+  
+  // Store the interval ID for cleanup
+  state.circuitMonitorInterval = monitorInterval;
 }
 
 async function createRoutingMap() {
@@ -420,60 +658,88 @@ async function createRoutingMap() {
   await state.anonControlClient.disableStreamAttachment();
 
   const eventListener = async (event: StreamEvent) => {
-    if (event.status === 'NEW') {
-      const targetAddress = event.target.split(':')[0];
-      const circuitId = state.routingMap[targetAddress];
+    try {
+      // console.log('Stream event:', event);
+      
+      // Detect circuit failures through REMAP events
+      if (event.status === 'REMAP') {
+        console.log(`Circuit failure detected: Stream ${event.streamId} remapped from circuit ${event.circId} to new circuit`);
+        handleCircuitFailure(event.circId, event.target);
+      }
+      
+      if (event.status === 'NEW') {
+        const targetAddress = event.target.split(':')[0];
+        const circuitId = state.routingMap[targetAddress];
 
-      if (circuitId && (event.circId === '0' || event.circId === undefined)) {
-        console.log('Attaching stream to circuit in routing map:', circuitId);
-        await state.anonControlClient.attachStream(event.streamId, circuitId);
-      } else {
-        let circuits;
-        let retries = 3;
-        let success = false;
-        
-        while (retries > 0 && !success) {
+        if (circuitId && (event.circId === '0' || event.circId === undefined)) {
+          console.log('Attaching stream to circuit in routing map:', circuitId);
           try {
-            circuits = await state.anonControlClient.circuitStatus();
-            
-            if (!circuits || circuits.length === 0) {
-              throw new Error('No circuits found in response');
-            }
-            
-            success = true;
+            await state.anonControlClient.attachStream(event.streamId, circuitId);
           } catch (error) {
-            console.log(`Error getting circuit status (attempt ${4-retries}/3):`, error.message);
-            if (error.message.includes('Failed to get relay address')) {
-              console.log('Got circuit status but failed to get relay info, proceeding with available data');
-              success = true;
-            } else {
-              retries--;
-              if (retries === 0) {
-                console.error('Failed to get circuit status after multiple attempts:', error);
-                return;
+            console.error(`Failed to attach stream ${event.streamId} to circuit ${circuitId}:`, error);
+            // Continue processing other streams even if this one fails
+          }
+        } else {
+          let circuits;
+          let retries = 3;
+          let success = false;
+          
+          while (retries > 0 && !success) {
+            try {
+              circuits = await state.anonControlClient.circuitStatus();
+              
+              if (!circuits || circuits.length === 0) {
+                throw new Error('No circuits found in response');
               }
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              success = true;
+            } catch (error) {
+              console.log(`Error getting circuit status (attempt ${4-retries}/3):`, error.message);
+              if (error.message.includes('Failed to get relay address')) {
+                console.log('Got circuit status but failed to get relay info, proceeding with available data');
+                success = true;
+              } else {
+                retries--;
+                if (retries === 0) {
+                  console.error('Failed to get circuit status after multiple attempts:', error);
+                  return;
+                }
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              }
+            }
+          }
+          
+          const openCircuits = circuits.filter(circuit => 
+            circuit.state === 'BUILT' && 
+            circuit.purpose === 'GENERAL' &&
+            circuit.relays.length === 3
+          );
+          
+          if (openCircuits.length > 0) {
+            const randomCircuit = openCircuits[Math.floor(Math.random() * openCircuits.length)];
+            console.log(`Found ${openCircuits.length} open circuits, randomly selected circuit ${randomCircuit.circuitId}`);
+            try {
+              await state.anonControlClient.attachStream(event.streamId, randomCircuit.circuitId);
+            } catch (error) {
+              console.error(`Failed to attach stream ${event.streamId} to random circuit ${randomCircuit.circuitId}:`, error);
             }
           }
         }
-        
-        const openCircuits = circuits.filter(circuit => 
-          circuit.state === 'BUILT' && 
-          circuit.purpose === 'GENERAL' &&
-          circuit.relays.length === 3
-        );
-        
-        if (openCircuits.length > 0) {
-          const randomCircuit = openCircuits[Math.floor(Math.random() * openCircuits.length)];
-          console.log(`Found ${openCircuits.length} open circuits, randomly selected circuit ${randomCircuit.circuitId}`);
-          await state.anonControlClient.attachStream(event.streamId, randomCircuit.circuitId);
-        }
       }
+    } catch (error) {
+      console.error('Error in stream event listener:', error);
+      // Don't let individual stream errors crash the entire listener
     }
   };
 
-  await state.anonControlClient.addEventListener(
-    eventListener, 
-    EventType.STREAM
-  );
+  try {
+    await state.anonControlClient.addEventListener(
+      eventListener, 
+      EventType.STREAM
+    );
+  } catch (error) {
+    console.error('Failed to register stream event listener:', error);
+    // Continue without stream routing if listener registration fails
+  }
 }
+

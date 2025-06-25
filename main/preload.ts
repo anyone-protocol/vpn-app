@@ -119,6 +119,30 @@ const handler = {
     };
   },
 
+  // Circuit failure events
+  onCircuitFailure(callback: (data: { circuitId: string; target: string; timestamp: string }) => void) {
+    const subscription = (_event: IpcRendererEvent, data: { circuitId: string; target: string; timestamp: string }) => callback(data);
+    ipcRenderer.on("circuit-failure", subscription);
+    return () => {
+      ipcRenderer.removeListener("circuit-failure", subscription);
+    };
+  },
+
+  onCircuitRecreated(callback: (data: { oldCircuitId: string; newCircuitId: number; target: string; timestamp: string }) => void) {
+    const subscription = (_event: IpcRendererEvent, data: { oldCircuitId: string; newCircuitId: number; target: string; timestamp: string }) => callback(data);
+    ipcRenderer.on("circuit-recreated", subscription);
+    return () => {
+      ipcRenderer.removeListener("circuit-recreated", subscription);
+    };
+  },
+
+  onCircuitCreated(callback: (data: { newCircuitId: number; target: string; timestamp: string }) => void) {
+    const subscription = (_event: IpcRendererEvent, data: { newCircuitId: number; target: string; timestamp: string }) => callback(data);
+    ipcRenderer.on("circuit-created", subscription);
+    return () => {
+      ipcRenderer.removeListener("circuit-created", subscription);
+    };
+  },
 
   // window-resize
   onWindowResize: (callback: (height: number, width: number) => void) => {

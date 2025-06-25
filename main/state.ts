@@ -57,6 +57,7 @@ interface AppState {
   fingerprintData: Map<string, FingerprintData>;
   screenSize: { width: number; height: number };
   termsFilePath: string | null;
+  circuitMonitorInterval: NodeJS.Timeout | null;
 }
 
 export const state: AppState = {
@@ -83,6 +84,7 @@ export const state: AppState = {
   fingerprintData: new Map(),
   screenSize: { width: 0, height: 0 },
   termsFilePath: termsFilePath,
+  circuitMonitorInterval: null,
 };
 
 export async function initializeState() {
