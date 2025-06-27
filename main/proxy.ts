@@ -669,7 +669,19 @@ async function createRoutingMap() {
       
       if (event.status === 'NEW') {
         const targetAddress = event.target.split(':')[0];
-        const circuitId = state.routingMap[targetAddress];
+        // console.log('event', event);
+        
+        // Check if the target address matches any key in the routing map using includes
+        let circuitId: number | undefined;
+        for (const [key, value] of Object.entries(state.routingMap)) {
+          if (targetAddress.includes(key) || key.includes(targetAddress)) {
+            circuitId = value;
+            break;
+          }
+        }
+        
+        console.log('circuitId', circuitId);
+        // console.log('routingMap', state.routingMap);
 
         if (circuitId && (event.circId === '0' || event.circId === undefined)) {
           console.log('Attaching stream to circuit in routing map:', circuitId);
