@@ -1,27 +1,26 @@
 // src/main/ipcHandlers.ts
-import { ipcMain, BrowserWindow, nativeTheme, screen } from "electron";
-import { getGroupedConnectedProcesses } from "./utils/getConnectedProcesses";
-import { setAutoLaunch, isAutoLaunchEnabled } from "./autoLaunch";
-import { autoUpdater } from "electron-updater";
+import { Process } from "@anyone-protocol/anyone-client";
+import { BrowserWindow, ipcMain, nativeTheme } from "electron";
 import Store from "electron-store";
+import { autoUpdater } from "electron-updater";
+import { isAutoLaunchEnabled, setAutoLaunch } from "./autoLaunch";
+import { app } from "./background";
+import { ProxyRule, startAnyoneProxy, stopAnyoneProxy } from "./proxy";
+import { state } from "./state";
+import { setProxySettings } from "./systemProxy";
+import { UpdateTrayIcon } from "./tray";
 import { checkForUpdates } from "./updater";
-import { startAnyoneProxy, stopAnyoneProxy } from "./proxy";
 import {
   checkIP,
   getGeolocation,
   getGeolocationByCoords,
   getIcon,
 } from "./utils";
+import { getGroupedConnectedProcesses } from "./utils/getConnectedProcesses";
 import {
   expandMainWindow,
   minimizeMainWindow,
 } from "./windows";
-import { setProxySettings } from "./systemProxy";
-import { state } from "./state";
-import { app } from "./background";
-import { UpdateTrayIcon } from "./tray";
-import { ProxyRule } from "./proxy";
-import { Process } from "@anyone-protocol/anyone-client";
 const store = new Store();
 
 export function setupIpcHandlers(mainWindow: BrowserWindow) {

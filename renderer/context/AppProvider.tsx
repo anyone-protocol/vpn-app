@@ -2,13 +2,13 @@
 import React, {
   createContext,
   useContext,
-  useState,
   useEffect,
   useRef,
+  useState,
 } from "react";
-import { FingerPrintData } from "../../main/utils";
-import { RelayData } from "../../main/state";
 import { ProxyRule } from "../../main/proxy";
+import { RelayData } from "../../main/state";
+import { FingerPrintData } from "../../main/utils";
 interface LocationData {
   latitude: number;
   longitude: number;

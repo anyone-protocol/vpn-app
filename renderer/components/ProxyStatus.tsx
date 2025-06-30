@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
 import {
   Box,
-  Text,
   Circle,
   Progress,
+  Text,
 } from "@chakra-ui/react";
+import React, { useEffect, useState } from "react";
 import MinimizedMapComponent from "./MinimizedMapComponent";
 
 interface LocationData {

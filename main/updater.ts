@@ -1,9 +1,9 @@
 // src/main/updater.ts
-import { autoUpdater } from "electron-updater";
 import Store from "electron-store";
+import { autoUpdater } from "electron-updater";
+import { getRelayData } from "./proxy";
 import { state } from "./state";
 import { checkIP } from "./utils";
-import { getRelayData } from "./proxy";
 
 const store = new Store();
 

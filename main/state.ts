@@ -1,13 +1,12 @@
 // src/main/state.ts
-import { BrowserWindow, Menu, Tray } from "electron";
 import {
+  Control,
   Process,
   Socks,
-  Control,
 } from "@anyone-protocol/anyone-client";
-import { exePath, termsFilePath } from "./constants";
-import { FingerPrintData } from "./utils";
+import { BrowserWindow } from "electron";
 import { Menubar } from "menubar";
+import { exePath, termsFilePath } from "./constants";
 
 export interface RelayData {
   fingerprint: string;

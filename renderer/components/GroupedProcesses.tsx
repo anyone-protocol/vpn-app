@@ -1,24 +1,23 @@
 // components/GroupedProcesses.tsx
-import React, { useMemo } from "react";
 import {
-  Box,
   Accordion,
-  AccordionItem,
   AccordionButton,
-  AccordionPanel,
   AccordionIcon,
-  Flex,
+  AccordionItem,
+  AccordionPanel,
   Avatar,
-  Text,
+  Box,
+  Flex,
   Table,
-  Thead,
   Tbody,
-  Tr,
-  Th,
   Td,
-  Button,
+  Text,
+  Th,
+  Thead,
+  Tr
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
+import React, { useMemo } from "react";
 
 interface GroupedProcessInfo {
   processName: string;

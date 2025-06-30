@@ -1,6 +1,5 @@
+import { Box, Text } from "@chakra-ui/react";
 import React from "react";
-import { Box, Text, Circle } from "@chakra-ui/react";
-import MinimizedMapComponent from "./MinimizedMapComponent";
 import { IoMdExit } from "react-icons/io";
 
 interface ExitButtonProps {

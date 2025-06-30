@@ -1,8 +1,8 @@
 import { Flex, Text } from "@chakra-ui/react";
 import { motion } from "framer-motion";
-import { TbCopy, TbCopyCheck } from "react-icons/tb";
 import { useState } from "react";
 import { FaExpandAlt } from "react-icons/fa";
+import { TbCopy, TbCopyCheck } from "react-icons/tb";
 
 interface IPCardProps {
   label: string;

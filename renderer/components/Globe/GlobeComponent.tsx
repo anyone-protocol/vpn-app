@@ -1,12 +1,12 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
-import { Canvas, invalidate, useFrame, useThree } from "@react-three/fiber";
-import * as THREE from "three";
 import {
   Billboard,
   Line,
   OrbitControls,
   Text,
 } from "@react-three/drei";
+import { Canvas, invalidate, useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 import data from "../../assets/globe/grid.json";
 import BackgroundSphere from "./BackgroundSphere"; // Adjust the path as necessary
 

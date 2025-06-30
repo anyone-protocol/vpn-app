@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
-import lottie from "lottie-web";
-import anyoneBg from "../../assets/Anyone-logo-animation.json";
 import { Box } from "@chakra-ui/react";
+import lottie from "lottie-web";
+import { useEffect, useRef } from "react";
+import anyoneBg from "../../assets/Anyone-logo-animation.json";
 import { useAppContext } from "../../context/AppProvider";
 
 const BgAnimations = ({ autoplay = true, loop = true, expanded }) => {

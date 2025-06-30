@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
-import { RelayData } from "./state";
 import { ProxyRule } from "./proxy";
+import { RelayData } from "./state";
 
 const handler = {
   send(channel: string, value: unknown) {

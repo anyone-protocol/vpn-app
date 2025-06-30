@@ -1,4 +1,4 @@
-import { Flex, IconButton, Box } from "@chakra-ui/react";
+import { Box, Flex, IconButton } from "@chakra-ui/react";
 import { MdOutlineZoomIn, MdOutlineZoomOut } from "react-icons/md";
 
 const ZoomControls = ({ onZoomIn, onZoomOut }) => {

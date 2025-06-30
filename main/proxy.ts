@@ -1,24 +1,20 @@
 // src/main/proxy.ts
 import {
-  Process,
-  Socks,
-  Control,
   AnonRunningError,
-  BootstrapProgressEvent
+  BootstrapProgressEvent,
+  Control,
+  Process,
+  Socks
 } from "@anyone-protocol/anyone-client";
-import {
-  startProxy as startPrivoxy,
-  stopProxy as stopPrivoxy,
-} from "./utils/proxy";
-import { setProxySettings } from "./systemProxy";
-import { state } from "./state";
-import { checkIP, showNotification } from "./utils";
-import { getAvailablePort } from "./utils/proxy";
-import { ipcMain } from "electron";
-import { getFingerPrintData } from "./utils";
-import { RelayData, ProxyRuleConfig } from "./state";
-import Store  from "electron-store";
 import { EventType, ExtendCircuitOptions, Flag, StreamEvent } from "@anyone-protocol/anyone-client/out/models";
+import { ipcMain } from "electron";
+import Store from "electron-store";
+import { ProxyRuleConfig, RelayData, state } from "./state";
+import { setProxySettings } from "./systemProxy";
+import { checkIP, getFingerPrintData, showNotification } from "./utils";
+import {
+  stopProxy as stopPrivoxy
+} from "./utils/proxy";
 
 const store = new Store();
 

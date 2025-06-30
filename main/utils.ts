@@ -1,7 +1,6 @@
 // src/main/utils.ts
 import { Notification, nativeImage } from "electron";
 import fs from "fs";
-import path from "path";
 import { state } from "./state";
 
 export function showNotification(title: string, body: string) {

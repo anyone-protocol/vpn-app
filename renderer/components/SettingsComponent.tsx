@@ -1,20 +1,18 @@
 import {
   Box,
+  Button,
   Flex,
-  Text,
-  Switch,
   FormControl,
   FormLabel,
-  Button,
-  useColorModeValue,
+  Switch,
+  useColorModeValue
 } from "@chakra-ui/react";
-import { FaPen } from "react-icons/fa";
 import { useEffect, useState } from "react";
-import { GrUpdate } from "react-icons/gr";
 import { FaPowerOff } from "react-icons/fa6";
+import { GrUpdate } from "react-icons/gr";
 
-import { useAppContext } from "../context/AppProvider";
 import { TbArrowsMoveHorizontal } from "react-icons/tb";
+import { useAppContext } from "../context/AppProvider";
 
 export const SettingsComponent = ({
   headerBgColor,

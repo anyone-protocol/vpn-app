@@ -1,11 +1,10 @@
-import { app, Tray, Menu, nativeImage, BrowserWindow, ipcMain } from "electron";
+import { app, Menu, nativeImage } from "electron";
+import { menubar } from "menubar";
 import path from "path";
-import { startAnyoneProxy, stopAnyoneProxy } from "./proxy";
+import { isProd } from "./constants";
+import { stopAnyoneProxy } from "./proxy";
 import { state } from "./state";
 import { setProxySettings } from "./systemProxy";
-import { isProd } from "./constants";
-import { menubar } from "menubar";
-import { setupIpcHandlers } from "./ipcHandlers";
 
 export function UpdateTrayIcon() {
   const iconPath = state.isProxyRunning

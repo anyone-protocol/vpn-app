@@ -1,17 +1,10 @@
-import React, { useEffect } from "react";
-import { AppProvider, useAppContext } from "../context/AppProvider";
 import {
   Box,
-  Stack,
-  useColorModeValue,
-  Flex,
-  useColorMode,
-  Grid,
-  GridItem,
   Button,
+  useColorModeValue
 } from "@chakra-ui/react";
 import dynamic from "next/dynamic"; // Import dynamic from Next.js
-import App from "next/app";
+import { AppProvider, useAppContext } from "../context/AppProvider";
 
 const IPCardTray = dynamic(() => import("../components/IPCardTray"), {
   ssr: false,

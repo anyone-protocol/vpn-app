@@ -1,10 +1,10 @@
 // src/main/windows.ts
-import { app, BrowserWindow, screen, nativeImage, ipcMain } from "electron";
-import path from "path";
-import { createWindow } from "./helpers";
-import { isProd } from "./constants";
-import { state } from "./state";
+import { app, BrowserWindow, nativeImage, screen } from "electron";
 import Store from "electron-store";
+import path from "path";
+import { isProd } from "./constants";
+import { createWindow } from "./helpers";
+import { state } from "./state";
 const store = new Store();
 
 export function createMainWindow(): BrowserWindow {

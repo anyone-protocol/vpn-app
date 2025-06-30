@@ -1,10 +1,10 @@
 import {
   Box,
   Flex,
-  Text,
-  InputGroup,
   Input,
+  InputGroup,
   InputRightAddon,
+  Text,
 } from "@chakra-ui/react";
 import { FaPen } from "react-icons/fa";
 

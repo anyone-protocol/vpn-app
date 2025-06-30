@@ -1,7 +1,7 @@
 // AnimatedButton.tsx
 import { Box } from "@chakra-ui/react";
-import React from "react";
 import dynamic from "next/dynamic";
+import React from "react";
 
 import Logo from "./LottieAnimation/Logo";
 

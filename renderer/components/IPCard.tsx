@@ -1,33 +1,27 @@
 import {
-  Flex,
-  Text,
   Box,
+  Button,
   Drawer,
   DrawerBody,
-  DrawerFooter,
+  DrawerCloseButton,
+  DrawerContent,
   DrawerHeader,
   DrawerOverlay,
-  DrawerContent,
-  DrawerCloseButton,
-  Button,
+  Flex,
+  Text,
   useDisclosure,
-  VStack,
-  HStack,
-  Select,
+  VStack
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
-import { TbCopy, TbCopyCheck } from "react-icons/tb";
-import { useState, useRef } from "react";
-import { useAppContext } from "../context/AppProvider";
-import { ipcMain } from "electron";
-import { MdSecurity, MdRule, MdAdd } from "react-icons/md";
+import { useRef, useState } from "react";
 import { FiSettings } from "react-icons/fi";
-import { SlArrowRight } from "react-icons/sl";
-import { SlArrowLeft } from "react-icons/sl";
-import { PortComponent } from "./PortComponent";
-import { SettingsComponent } from "./SettingsComponent";
-import { RuleBox, Rule } from "./RuleBox";
+import { MdAdd, MdSecurity } from "react-icons/md";
+import { SlArrowLeft, SlArrowRight } from "react-icons/sl";
+import { TbCopy, TbCopyCheck } from "react-icons/tb";
+import { useAppContext } from "../context/AppProvider";
 import { NewRuleBox } from "./NewRuleBox";
+import { Rule, RuleBox } from "./RuleBox";
+import { SettingsComponent } from "./SettingsComponent";
 
 interface IPCardProps {
   label: string;

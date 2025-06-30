@@ -1,22 +1,15 @@
-import React from "react";
+import { CloseIcon, useColorModeValue } from "@chakra-ui/icons";
 import {
   Box,
-  Heading,
   Flex,
+  Heading,
   IconButton,
   Spacer,
-  useColorMode,
-  Menu,
-  MenuButton,
-  MenuList,
-  MenuItem,
+  useColorMode
 } from "@chakra-ui/react";
-import { MoonIcon, SunIcon, useColorModeValue } from "@chakra-ui/icons";
-import { FiSettings, FiMoreVertical } from "react-icons/fi";
-import { CloseIcon, MinusIcon } from "@chakra-ui/icons";
-import { FaExpandAlt } from "react-icons/fa";
+import React from "react";
+import { FiSettings } from "react-icons/fi";
 import Logo from "../components/Icons/Logo";
-import { on } from "events";
 
 interface AppHeaderProps {
   expanded: boolean;
