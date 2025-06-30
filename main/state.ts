@@ -35,7 +35,6 @@ export interface ProxyRuleConfig {
 
 interface AppState {
   mainWindow: BrowserWindow | null;
-  settingsWindow: BrowserWindow | null;
   tray: Menubar;
   isQuitting: boolean;
   isProxyRunning: boolean;
@@ -61,7 +60,6 @@ interface AppState {
 
 export const state: AppState = {
   mainWindow: null,
-  settingsWindow: null,
   tray: null,
   isQuitting: false,
   isProxyRunning: false,

@@ -148,9 +148,6 @@ const handler = {
   setAutoLaunch: (enable: boolean) =>
     ipcRenderer.invoke("set-auto-launch", enable),
   isAutoLaunchEnabled: () => ipcRenderer.invoke("is-auto-launch-enabled"),
-  openSettingsWindow: () => ipcRenderer.invoke("open-settings-window"),
-  closeSettingsWindow: () => ipcRenderer.invoke("close-settings-window"),
-  hideSettingsWindow: () => ipcRenderer.invoke("hide-settings-window"),
   quitApp: () => ipcRenderer.invoke("quit-app"),
   closeApp: () => ipcRenderer.invoke("close-app"),
   minimizeApp: () => ipcRenderer.invoke("minimize-app"),

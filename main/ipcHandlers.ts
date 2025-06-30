@@ -13,10 +13,8 @@ import {
   getIcon,
 } from "./utils";
 import {
-  createSettingsWindow,
   expandMainWindow,
   minimizeMainWindow,
-  hideSettingsWindow,
 } from "./windows";
 import { setProxySettings } from "./systemProxy";
 import { state } from "./state";
@@ -125,19 +123,6 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
   ipcMain.handle("get-relay-data", () => {
     return state.relayData;
-  });
-
-  // Settings page
-  ipcMain.handle("open-settings-window", () => {
-    createSettingsWindow();
-  });
-
-  ipcMain.handle("hide-settings-window", () => {
-    hideSettingsWindow();
-  });
-
-  ipcMain.handle("close-settings-window", () => {
-    state.settingsWindow?.hide();
   });
 
   ipcMain.handle("get-screen-size", () => {

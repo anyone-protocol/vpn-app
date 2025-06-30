@@ -112,7 +112,7 @@ export const CreateHTMLTray = () => {
         nodeIntegrationInWorker: true,
       },
     },
-    preloadWindow: true,
+    preloadWindow: false,
     index: isProd ? "app://./tray/index.html" : `http://localhost:${port}/tray`,
     icon: path.join(app.getAppPath(), "resources", "tray-red.png"),
   });
