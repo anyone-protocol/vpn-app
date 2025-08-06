@@ -32,7 +32,11 @@ export const defaultDNSProxyConfig: DNSProxyConfig = {
     // Override specific domains with IP addresses
     'dev': '127.0.0.1',
     'localhost': '127.0.0.1',
-    'internal': '192.168.1.1'
+    'internal': '192.168.1.1',
+    // Geolocation APIs - bypass DNS proxy for these
+    'ipwhois.app': 'direct',
+    'ipapi.co': 'direct',
+    'ipinfo.io': 'direct'
   },
   hosts: {
     // Override specific hosts

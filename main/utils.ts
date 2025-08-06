@@ -99,7 +99,33 @@ export async function checkIP(useProxy: boolean): Promise<string | null> {
 
 export async function getGeolocation(ip: string) {
   try {
-    // First, try fetching from ipwhois.io
+    // Try to use SOCKS proxy if available
+    if (state.anonSocksClient) {
+      try {
+        // Use SOCKS proxy for the API call with timeout
+        const response = await Promise.race([
+          state.anonSocksClient.get(`https://ipwhois.app/json/${ip}`),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('SOCKS timeout')), 5000)
+          )
+        ]) as any;
+        
+        if (response && response.data) {
+          return {
+            latitude: response.data.latitude,
+            longitude: response.data.longitude,
+            city: response.data.city,
+            region: response.data.region,
+            country: response.data.country,
+            countryCode: response.data.country_code,
+          };
+        }
+      } catch (socksError) {
+        console.log("SOCKS proxy geolocation failed, trying direct connection:", socksError.message);
+      }
+    }
+
+    // Fallback to direct connection
     const response = await fetch(`https://ipwhois.app/json/${ip}`);
     if (!response.ok) throw new Error("ipwhois.app failed");
 
@@ -117,7 +143,35 @@ export async function getGeolocation(ip: string) {
 
     // Fallback to ipapi.co if the primary API fails
     try {
-      const fallbackResponse = await fetch(`https://ipapi.co/${ip}/json/`);
+      let fallbackResponse;
+      
+      // Try SOCKS proxy first for fallback
+      if (state.anonSocksClient) {
+        try {
+          fallbackResponse = await Promise.race([
+            state.anonSocksClient.get(`https://ipapi.co/${ip}/json/`),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('SOCKS timeout')), 5000)
+            )
+          ]) as any;
+          
+          if (fallbackResponse && fallbackResponse.data) {
+            return {
+              latitude: fallbackResponse.data.latitude,
+              longitude: fallbackResponse.data.longitude,
+              city: fallbackResponse.data.city,
+              region: fallbackResponse.data.region,
+              country: fallbackResponse.data.country_name,
+              countryCode: fallbackResponse.data.country,
+            };
+          }
+        } catch (socksError) {
+          console.log("SOCKS proxy fallback failed, trying direct connection:", socksError.message);
+        }
+      }
+      
+      // Direct connection fallback
+      fallbackResponse = await fetch(`https://ipapi.co/${ip}/json/`);
       if (!fallbackResponse.ok) throw new Error("ipapi.co failed");
 
       const fallbackData = await fallbackResponse.json();
@@ -131,6 +185,9 @@ export async function getGeolocation(ip: string) {
       };
     } catch (fallbackError) {
       console.error("Fallback API (ipapi.co) failed:", fallbackError);
+      
+      // If both APIs fail, return a basic response
+      console.log("All geolocation APIs failed - returning basic response");
       return null;
     }
   }
@@ -138,6 +195,34 @@ export async function getGeolocation(ip: string) {
 
 export async function getGeolocationByCoords(lat: number, lon: number) {
   try {
+    // Try to use SOCKS proxy if available
+    if (state.anonSocksClient) {
+      try {
+        const response = await Promise.race([
+          state.anonSocksClient.get(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`
+          ),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('SOCKS timeout')), 5000)
+          )
+        ]) as any;
+        
+        if (response && response.data) {
+          return {
+            latitude: lat,
+            longitude: lon,
+            city: response.data.address.city ? response.data.address.city : response.data.address.village,
+            region: response.data.address.state,
+            country: response.data.address.country,
+            countryCode: response.data.address.country_code,
+          };
+        }
+      } catch (socksError) {
+        console.log("SOCKS proxy geolocation by coords failed, trying direct connection:", socksError.message);
+      }
+    }
+
+    // Fallback to direct connection
     const response = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`
     );
@@ -155,6 +240,9 @@ export async function getGeolocationByCoords(lat: number, lon: number) {
     };
   } catch (error) {
     console.error("Error fetching geolocation by coordinates:", error);
+    
+    // If geolocation fails, return a basic response with the coordinates
+    console.log("Geolocation by coordinates failed - returning basic response");
     return null;
   }
 }
