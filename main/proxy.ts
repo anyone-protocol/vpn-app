@@ -15,6 +15,7 @@ import { checkIP, getFingerPrintData, showNotification } from "./utils";
 import {
   stopProxy as stopPrivoxy
 } from "./utils/proxy";
+import { startDNSProxy, stopDNSProxy } from "./dnsProxy";
 
 const store = new Store();
 
@@ -129,7 +130,20 @@ export async function startAnyoneProxy() {
     // do not start privoxy, use anon directly
     // state.proxyPort = await startPrivoxy(state.anonPort);
 
-    setProxySettings(true, state.proxyPort);
+    // Start DNS proxy
+    try {
+      state.dnsProxyPort = await startDNSProxy(state.dnsProxyPort);
+      state.isDNSProxyRunning = true;
+      console.log(`DNS proxy started on port ${state.dnsProxyPort}`);
+    } catch (error) {
+      console.error("Error starting DNS proxy:", error);
+      state.mainWindow?.webContents.send(
+        "proxy-error",
+        `Error starting DNS proxy: ${error.message}`
+      );
+    }
+
+    setProxySettings(true, state.proxyPort, state.dnsProxyPort);
 
     await new Promise((resolve) => setTimeout(resolve, 1500));
     try {
@@ -258,7 +272,19 @@ export async function stopAnyoneProxy() {
     console.log("Anyone proxy is not running.");
     return;
   }
-  setProxySettings(false, state.proxyPort);
+  
+  // Stop DNS proxy first
+  if (state.isDNSProxyRunning) {
+    try {
+      await stopDNSProxy();
+      state.isDNSProxyRunning = false;
+      console.log("DNS proxy stopped.");
+    } catch (error) {
+      console.error("Error stopping DNS proxy:", error);
+    }
+  }
+  
+  setProxySettings(false, state.proxyPort, state.dnsProxyPort);
   if (state.anonControlClient) {
     state.anonControlClient.end();
   }

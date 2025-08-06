@@ -9,6 +9,7 @@ import { ProxyRule, startAnyoneProxy, stopAnyoneProxy } from "./proxy";
 import { state } from "./state";
 import { setProxySettings } from "./systemProxy";
 import { UpdateTrayIcon } from "./tray";
+import { dnsProxyConfig } from "./dnsProxyConfig";
 import { checkForUpdates } from "./updater";
 import {
   checkIP,
@@ -191,6 +192,25 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     return state.anonPort;
   });
 
+  // DNS proxy status handlers
+  ipcMain.handle("get-dns-proxy-status", () => {
+    return {
+      isRunning: state.isDNSProxyRunning,
+      port: state.dnsProxyPort
+    };
+  });
+
+  ipcMain.handle("get-proxy-status", () => {
+    return {
+      isProxyRunning: state.isProxyRunning,
+      isDNSProxyRunning: state.isDNSProxyRunning,
+      proxyPort: state.proxyPort,
+      dnsProxyPort: state.dnsProxyPort,
+      relayIp: state.relayIp,
+      proxyIp: state.proxyIp
+    };
+  });
+
   ipcMain.handle("add-proxy-rule", async (_event, rule: Omit<ProxyRule, 'id'>) => {
     const newRule = {
       ...rule,
@@ -281,5 +301,68 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
   ipcMain.handle("is-main-window-minimized", () => {
     return mainWindow.isMinimized();
+  });
+
+  // DNS proxy configuration handlers
+  ipcMain.handle("get-dns-proxy-config", () => {
+    return dnsProxyConfig.getConfig();
+  });
+
+  ipcMain.handle("update-dns-proxy-config", async (_event, updates: any) => {
+    try {
+      dnsProxyConfig.updateConfig(updates);
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating DNS proxy config:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("add-dns-domain-override", async (_event, domain: string, ip: string) => {
+    try {
+      const config = dnsProxyConfig.getConfig();
+      config.domains[domain] = ip;
+      dnsProxyConfig.updateConfig({ domains: config.domains });
+      return { success: true };
+    } catch (error) {
+      console.error('Error adding DNS domain override:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("remove-dns-domain-override", async (_event, domain: string) => {
+    try {
+      const config = dnsProxyConfig.getConfig();
+      delete config.domains[domain];
+      dnsProxyConfig.updateConfig({ domains: config.domains });
+      return { success: true };
+    } catch (error) {
+      console.error('Error removing DNS domain override:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("add-dns-nameserver", async (_event, tld: string, nameserver: string) => {
+    try {
+      const config = dnsProxyConfig.getConfig();
+      config.servers[tld] = nameserver;
+      dnsProxyConfig.updateConfig({ servers: config.servers });
+      return { success: true };
+    } catch (error) {
+      console.error('Error adding DNS nameserver:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("remove-dns-nameserver", async (_event, tld: string) => {
+    try {
+      const config = dnsProxyConfig.getConfig();
+      delete config.servers[tld];
+      dnsProxyConfig.updateConfig({ servers: config.servers });
+      return { success: true };
+    } catch (error) {
+      console.error('Error removing DNS nameserver:', error);
+      throw error;
+    }
   });
 }

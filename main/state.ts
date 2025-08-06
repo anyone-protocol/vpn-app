@@ -55,6 +55,8 @@ interface AppState {
   fingerprintData: Map<string, FingerprintData>;
   screenSize: { width: number; height: number };
   termsFilePath: string | null;
+  dnsProxyPort: number;
+  isDNSProxyRunning: boolean;
 }
 
 export const state: AppState = {
@@ -80,6 +82,8 @@ export const state: AppState = {
   fingerprintData: new Map(),
   screenSize: { width: 0, height: 0 },
   termsFilePath: termsFilePath,
+  dnsProxyPort: 53535,
+  isDNSProxyRunning: false,
 };
 
 export async function initializeState() {
