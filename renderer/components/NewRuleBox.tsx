@@ -11,9 +11,12 @@ import {
   NumberDecrementStepper,
   VStack,
   Textarea,
-  Select,
   HStack,
-  useDisclosure,
+  Tag,
+  TagLabel,
+  TagCloseButton,
+  Wrap,
+  WrapItem,
   Modal,
   ModalOverlay,
   ModalContent,
@@ -21,9 +24,13 @@ import {
   ModalBody,
   ModalCloseButton,
   ModalFooter,
+  Flex,
 } from "@chakra-ui/react";
 import { useState, useEffect } from "react";
 import { Rule } from "./RuleBox";
+import { ALL_COUNTRIES } from "../utils/countries";
+import CountrySelect from "./CountrySelect";
+import FlagIcon from "./FlagIcon";
 
 interface NewRuleBoxProps {
   isOpen: boolean;
@@ -44,9 +51,29 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
 }) => {
   const [title, setTitle] = useState(currentRule?.title || "");
   const [destinations, setDestinations] = useState(currentRule?.destinations.join("\n") || "");
-  const [hops, setHops] = useState(currentRule?.hops || 3);
+  const [hops, setHops] = useState(currentRule?.hops || 2);
   const [entryCountries, setEntryCountries] = useState(currentRule?.entryCountries.join(",") || "");
-  const [exitCountries, setExitCountries] = useState(currentRule?.exitCountries.join(",") || "");
+  const [exitCountries, setExitCountries] = useState<string[]>(currentRule?.exitCountries.map(c => c.toLowerCase()) ?? []);
+  const [availableCountries, setAvailableCountries] = useState<{ code: string; count: number }[]>([]);
+
+  const fetchCountries = () => {
+    window.ipc.getAvailableCountries().then(setAvailableCountries).catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchCountries();
+    return window.ipc.onProxyStarted(fetchCountries);
+  }, []);
+
+  // If we have SDK-provided countries, restrict to those; otherwise show all world countries
+  const displayCountries = availableCountries.length > 0
+    ? availableCountries
+        .map(({ code, count }) => {
+          const found = ALL_COUNTRIES.find(c => c.code === code);
+          return found ? { ...found, count } : null;
+        })
+        .filter(Boolean)
+    : ALL_COUNTRIES;
 
   useEffect(() => {
     if (currentRule) {
@@ -54,9 +81,19 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
       setDestinations(currentRule.destinations.join("\n"));
       setHops(currentRule.hops);
       setEntryCountries(currentRule.entryCountries.join(","));
-      setExitCountries(currentRule.exitCountries.map(c => c.toUpperCase()).join(","));
+      setExitCountries(currentRule.exitCountries.map(c => c.toLowerCase()));
     }
   }, [currentRule]);
+
+  const handleAddExitCountry = (code: string) => {
+    if (code && !exitCountries.includes(code)) {
+      setExitCountries([...exitCountries, code]);
+    }
+  };
+
+  const handleRemoveExitCountry = (code: string) => {
+    setExitCountries(exitCountries.filter(c => c !== code));
+  };
 
   const handleSubmit = () => {
     if (currentRule && onEditRule) {
@@ -66,7 +103,7 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
         destinations: destinations.split("\n").filter(d => d.trim() !== ""),
         hops,
         entryCountries: entryCountries.split(",").map(c => c.trim()).filter(c => c !== ""),
-        exitCountries: exitCountries.split(",").map(c => c.trim()).filter(c => c !== ""),
+        exitCountries,
       });
     } else if (onAddRule) {
       onAddRule({
@@ -74,7 +111,7 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
         destinations: destinations.split("\n").filter(d => d.trim() !== ""),
         hops,
         entryCountries: entryCountries.split(",").map(c => c.trim()).filter(c => c !== ""),
-        exitCountries: exitCountries.split(",").map(c => c.trim()).filter(c => c !== ""),
+        exitCountries,
       });
     }
     handleClose();
@@ -83,9 +120,9 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
   const handleClose = () => {
     setTitle("");
     setDestinations("");
-    setHops(3);
+    setHops(2);
     setEntryCountries("");
-    setExitCountries("");
+    setExitCountries([]);
     onClose();
   };
 
@@ -123,7 +160,7 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
               <Textarea
                 value={destinations}
                 onChange={(e) => setDestinations(e.target.value)}
-                placeholder="Enter destinations (one per line)"
+                placeholder="e.g. anyone.io (one per line)"
                 minH="100px"
                 bg="rgba(24, 24, 27, 0.70)"
                 border="1px solid"
@@ -176,19 +213,45 @@ export const NewRuleBox: React.FC<NewRuleBoxProps> = ({
             </FormControl> */}
 
             <FormControl>
-              <FormLabel color="gray.300">Exit Countries (comma-separated)</FormLabel>
-              <Input
-                value={exitCountries}
-                onChange={(e) => setExitCountries(e.target.value)}
-                placeholder="FR, DE, NL"
-                bg="rgba(24, 24, 27, 0.70)"
-                border="1px solid"
-                borderColor="gray.600"
-                _focus={{
-                  borderColor: headerBgColor,
-                  boxShadow: `0 0 0 1px ${headerBgColor}`,
-                }}
+              <FormLabel color="gray.300">
+                Exit Countries
+                {availableCountries.length === 0 && (
+                  <Box as="span" fontSize="xs" color="gray.500" ml={2}>(all countries — start proxy to see available)</Box>
+                )}
+              </FormLabel>
+              <CountrySelect
+                value={null}
+                onChange={(code) => { if (code) handleAddExitCountry(code); }}
+                options={displayCountries.filter(c => !exitCountries.includes(c.code))}
+                placeholder="Add Country"
+                headerBgColor={headerBgColor}
               />
+              {exitCountries.length > 0 && (
+                <Wrap mt={2} spacing={2}>
+                  {exitCountries.map(code => {
+                    const country = ALL_COUNTRIES.find(c => c.code === code);
+                    return (
+                      <WrapItem key={code}>
+                        <Tag
+                          size="md"
+                          borderRadius="full"
+                          variant="solid"
+                          bg="rgba(255,255,255,0.12)"
+                          color="white"
+                        >
+                          <TagLabel>
+                            <Flex as="span" align="center" gap={1} display="inline-flex">
+                              <FlagIcon code={code} width={16} />
+                              {code.toUpperCase()}{country ? ` — ${country.name}` : ""}
+                            </Flex>
+                          </TagLabel>
+                          <TagCloseButton onClick={() => handleRemoveExitCountry(code)} />
+                        </Tag>
+                      </WrapItem>
+                    );
+                  })}
+                </Wrap>
+              )}
             </FormControl>
           </VStack>
         </ModalBody>

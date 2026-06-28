@@ -144,6 +144,14 @@ const handler = {
     };
   },
 
+  onCircuitPathUpdated(callback: (data: { circuitId: number; target: string; hopCountries: string[]; hopCoordinates: Array<{ latitude: number; longitude: number } | null>; hopDetails: Array<{ fingerprint: string; nickname: string; ip: string; country: string; bandwidth: number; flags: string[] }> }) => void) {
+    const subscription = (_event: IpcRendererEvent, data: { circuitId: number; target: string; hopCountries: string[]; hopCoordinates: Array<{ latitude: number; longitude: number } | null>; hopDetails: Array<{ fingerprint: string; nickname: string; ip: string; country: string; bandwidth: number; flags: string[] }> }) => callback(data);
+    ipcRenderer.on("circuit-path-updated", subscription);
+    return () => {
+      ipcRenderer.removeListener("circuit-path-updated", subscription);
+    };
+  },
+
   // window-resize
   onWindowResize: (callback: (height: number, width: number) => void) => {
     const subscription = (_event: IpcRendererEvent, height: number, width: number) => {
@@ -181,8 +189,7 @@ const handler = {
   expandApp: () => ipcRenderer.invoke("expand-app"),
   minimizeExpandedApp: () => ipcRenderer.invoke("minimize-expanded-app"),
   getGeolocation: (ip: string) => ipcRenderer.invoke("get-geolocation", ip),
-  getGeolocationByCoords: (lat: number, lon: number) => ipcRenderer.invoke("get-geolocation-by-coords", lat, lon),
-  getIcon: (iconPath) => ipcRenderer.invoke("get-icon", iconPath),
+getIcon: (iconPath) => ipcRenderer.invoke("get-icon", iconPath),
   getRelayData: () => ipcRenderer.invoke("get-relay-data"),
   getRealIP: () => ipcRenderer.invoke("get-real-ip"),
   getProxyIP: () => ipcRenderer.invoke("get-proxy-ip"),
@@ -228,10 +235,24 @@ const handler = {
   addNewProxyRule: (rule: Omit<ProxyRule, 'id'>) => ipcRenderer.invoke("add-proxy-rule", rule),
   editProxyRule: (rule: ProxyRule) => ipcRenderer.invoke("edit-proxy-rule", rule),
   deleteProxyRule: (ruleId: string) => ipcRenderer.invoke("delete-proxy-rule", ruleId),
+  toggleProxyRule: (ruleId: string) => ipcRenderer.invoke("toggle-proxy-rule", ruleId),
+  toggleAllProxyRules: (enabled: boolean) => ipcRenderer.invoke("toggle-all-proxy-rules", enabled),
   getProxyRules: () => ipcRenderer.invoke("get-proxy-rules"),
+  getAvailableCountries: (options?: { minExitCount?: number; excludeCountries?: string[] }): Promise<{ code: string; count: number }[]> => ipcRenderer.invoke("get-available-countries", options),
+  getGlobalExitCountry: (): Promise<string | null> => ipcRenderer.invoke("get-global-exit-country"),
+  setGlobalExitCountry: (country: string | null) => ipcRenderer.invoke("set-global-exit-country", country),
+  onGlobalExitCountryChanged: (callback: (country: string | null) => void) => {
+    const subscription = (_event: IpcRendererEvent, country: string | null) => callback(country);
+    ipcRenderer.on("global-exit-country-changed", subscription);
+    return () => ipcRenderer.removeListener("global-exit-country-changed", subscription);
+  },
   killAnonProcess: () => ipcRenderer.invoke("kill-anon-process"),
   getShowAnimations: () => ipcRenderer.invoke("get-show-animations"),
   setShowAnimations: (showAnimations: boolean) => ipcRenderer.invoke("set-show-animations", showAnimations),
+  getDynamicPort: () => ipcRenderer.invoke("get-dynamic-port"),
+  setDynamicPort: (enabled: boolean) => ipcRenderer.invoke("set-dynamic-port", enabled),
+  getMatchSubdomains: () => ipcRenderer.invoke("get-match-subdomains"),
+  setMatchSubdomains: (enabled: boolean) => ipcRenderer.invoke("set-match-subdomains", enabled),
   isMainWindowMinimized: () => ipcRenderer.invoke("is-main-window-minimized"),
 };
 

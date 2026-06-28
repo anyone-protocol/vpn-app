@@ -1,23 +1,12 @@
 export const processIconMap: { [key: string]: string } = {
-  code: "https://upload.wikimedia.org/wikipedia/commons/9/9a/Visual_Studio_Code_1.35_icon.svg",
-  visual:
-    "https://upload.wikimedia.org/wikipedia/commons/9/9a/Visual_Studio_Code_1.35_icon.svg",
-  "google chrome":
-    "https://www.google.com/chrome/static/images/chrome-logo.svg",
-  google: "https://www.google.com/chrome/static/images/chrome-logo.svg",
-  brave:
-    "https://upload.wikimedia.org/wikipedia/commons/5/51/Brave_icon_lionface.png",
-  slack:
-    "https://cdn.brandfolder.io/5H442O3W/at/pl546j-7le8zk-6gwiyo/Slack_Mark.svg",
-  terminal:
-    "https://upload.wikimedia.org/wikipedia/commons/5/51/Windows_Terminal_logo.svg",
-  finder:
-    "https://upload.wikimedia.org/wikipedia/commons/c/c9/Finder_Icon_macOS_Big_Sur.png",
-  safari:
-    "https://upload.wikimedia.org/wikipedia/commons/8/8d/Safari_2020_logo.svg",
-  firefox: "https://cdn.worldvectorlogo.com/logos/firefox.svg",
-  "System Preferences":
-    "https://upload.wikimedia.org/wikipedia/commons/1/1b/System_Icon.png",
+  code: "vscode.svg",
+  visual: "vscode.svg",
+  "google chrome": "chrome.svg",
+  google: "chrome.svg",
+  brave: "brave.png",
+  slack: "slack.svg",
+  safari: "safari.svg",
+  firefox: "firefox.svg",
 };
 
 /**

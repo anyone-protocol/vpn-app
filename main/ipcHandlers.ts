@@ -9,7 +9,6 @@ import { startAnyoneProxy, stopAnyoneProxy } from "./proxy";
 import {
   checkIP,
   getGeolocation,
-  getGeolocationByCoords,
   getIcon,
 } from "./utils";
 import {
@@ -20,7 +19,7 @@ import {
 } from "./windows";
 import { setProxySettings } from "./systemProxy";
 import { state } from "./state";
-import { app } from "./background";
+import { app } from "./main";
 import { UpdateTrayIcon } from "./tray";
 import { ProxyRule } from "./proxy";
 import { Process } from "@anyone-protocol/anyone-client";
@@ -78,12 +77,28 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
   });
 
   ipcMain.handle("get-show-animations", () => {
-    const showAnimations = store.get("showAnimations", true);
+    const showAnimations = store.get("showAnimations", false);
     return showAnimations;
   });
 
   ipcMain.handle("set-show-animations", (_event, showAnimations: boolean) => {
     store.set("showAnimations", showAnimations);
+  });
+
+  ipcMain.handle("get-dynamic-port", () => {
+    return store.get("dynamicPort", true) as boolean;
+  });
+
+  ipcMain.handle("set-dynamic-port", (_event, enabled: boolean) => {
+    store.set("dynamicPort", enabled);
+  });
+
+  ipcMain.handle("get-match-subdomains", () => {
+    return store.get("matchSubdomains", false) as boolean;
+  });
+
+  ipcMain.handle("set-match-subdomains", (_event, enabled: boolean) => {
+    store.set("matchSubdomains", enabled);
   });
 
   ipcMain.handle("set-auto-update-preference", (_event, enabled: boolean) => {
@@ -186,13 +201,6 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     return await getGeolocation(ip);
   });
 
-  ipcMain.handle(
-    "get-geolocation-by-coords",
-    async (_event, lat: number, lon: number) => {
-      return await getGeolocationByCoords(lat, lon);
-    }
-  );
-
   // Icon
   ipcMain.handle("get-icon", async (_event, iconPath: string) => {
     return await getIcon(iconPath);
@@ -210,7 +218,8 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
   ipcMain.handle("add-proxy-rule", async (_event, rule: Omit<ProxyRule, 'id'>) => {
     const newRule = {
       ...rule,
-      id: crypto.randomUUID()
+      id: crypto.randomUUID(),
+      enabled: true,
     };
     const currentRules = store.get("proxyRules", []) as ProxyRule[];
     store.set("proxyRules", [...currentRules, newRule]);
@@ -234,6 +243,22 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
     state.mainWindow?.webContents.send("proxy-rules-updated", updatedRules);
   });
 
+  ipcMain.handle("toggle-proxy-rule", async (_event, ruleId: string) => {
+    const currentRules = store.get("proxyRules", []) as ProxyRule[];
+    const updatedRules = currentRules.map(r =>
+      r.id === ruleId ? { ...r, enabled: r.enabled === false ? true : false } : r
+    );
+    store.set("proxyRules", updatedRules);
+    state.mainWindow?.webContents.send("proxy-rules-updated", updatedRules);
+  });
+
+  ipcMain.handle("toggle-all-proxy-rules", async (_event, enabled: boolean) => {
+    const currentRules = store.get("proxyRules", []) as ProxyRule[];
+    const updatedRules = currentRules.map(r => ({ ...r, enabled }));
+    store.set("proxyRules", updatedRules);
+    state.mainWindow?.webContents.send("proxy-rules-updated", updatedRules);
+  });
+
   ipcMain.handle("delete-proxy-rule", async (_event, ruleId: string) => {
     const currentRules = store.get("proxyRules", []) as ProxyRule[];
     const updatedRules = currentRules.filter(r => r.id !== ruleId);
@@ -242,6 +267,82 @@ export function setupIpcHandlers(mainWindow: BrowserWindow) {
 
   ipcMain.handle("get-proxy-rules", () => {
     return store.get("proxyRules", []) as ProxyRule[];
+  });
+
+  ipcMain.handle("get-global-exit-country", () => {
+    return store.get("globalExitCountry", null) as string | null;
+  });
+
+  ipcMain.handle("set-global-exit-country", async (_event, country: string | null) => {
+    store.set("globalExitCountry", country);
+    if (state.anonControlClient && state.isProxyRunning) {
+      if (country) {
+        try {
+          await state.anonControlClient.setConf("ExitNodes", `{${country}}`);
+          await state.anonControlClient.setConf("StrictNodes", "1");
+        } catch (e: any) {
+          // The SDK's control client can receive an async circuit-status event
+          // while waiting for the SETCONF reply and mistakenly treat it as the
+          // response. Code 250 means the command succeeded — safe to ignore.
+          if (e?.message?.includes("circuit-status")) {
+            console.warn("SETCONF interleaved with circuit-status event, command likely succeeded");
+          } else {
+            throw e;
+          }
+        }
+      } else {
+        // Any Country: best-effort reset — suppress all errors since a race
+        // between the RESETCONF reply and an async circuit event can cause a
+        // false failure. NEWNYM below rebuilds circuits without constraints.
+        try { await state.anonControlClient.resetConf("ExitNodes", "StrictNodes"); } catch (_) {}
+      }
+      // Close existing circuits so new ones are built through the new exit country
+      try {
+        await state.anonControlClient.msgAsync("SIGNAL NEWNYM");
+      } catch (e) {
+        console.warn("SIGNAL NEWNYM failed:", e);
+      }
+      // Re-check proxy IP after a short delay (new circuit needs time to build)
+      setTimeout(async () => {
+        try {
+          const { checkIP } = await import("./utils");
+          const newIp = await checkIP(true);
+          if (newIp) {
+            state.proxyIp = newIp;
+            state.mainWindow?.webContents.send("proxy-ip-changed", newIp);
+            state.tray?.window?.webContents.send("proxy-ip-changed", newIp);
+          }
+        } catch (e) {
+          console.warn("Failed to refresh proxy IP after country change:", e);
+        }
+      }, 5000);
+    }
+    state.mainWindow?.webContents.send("global-exit-country-changed", country);
+    state.tray?.window?.webContents.send("global-exit-country-changed", country);
+  });
+
+  ipcMain.handle("get-available-countries", (_event, options?: { minExitCount?: number; excludeCountries?: string[] }) => {
+    const minCount = options?.minExitCount ?? 3;
+    const exclude = new Set((options?.excludeCountries ?? []).map((c: string) => c.toLowerCase()));
+
+    if (state.stateManager?.isReady()) {
+      const countries = state.stateManager.getAvailableCountries();
+      const withCounts = countries
+        .filter((cc) => {
+          if (exclude.has(cc.toLowerCase())) return false;
+          return state.stateManager.getExitsByCountry(cc).length >= minCount;
+        })
+        .map((cc) => ({ code: cc, count: state.stateManager.getExitsByCountry(cc).length }))
+        .sort((a, b) => b.count - a.count);
+      if (withCounts.length > 0) {
+        store.set("cachedAvailableCountries", withCounts.map((c) => c.code));
+        return withCounts;
+      }
+    }
+
+    // Fallback to cached list — no live counts available
+    const cached = store.get("cachedAvailableCountries", []) as string[];
+    return cached.map((code) => ({ code, count: 0 }));
   });
 
   // change proxy port

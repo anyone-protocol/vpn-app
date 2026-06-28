@@ -1,24 +1,24 @@
 // src/main/proxy.ts
 import {
-  Process,
-  Socks,
-  Control,
-  AnonRunningError,
-  BootstrapProgressEvent
+    AnonRunningError,
+    BootstrapProgressEvent,
+    Control,
+    Process,
+    Socks,
+    StateManager,
+    VPNManager,
+    VPNManagerEvent,
 } from "@anyone-protocol/anyone-client";
-import {
-  startProxy as startPrivoxy,
-  stopProxy as stopPrivoxy,
-} from "./utils/proxy";
+import { EventType, StreamEvent, VPNTarget } from "@anyone-protocol/anyone-client/out/models";
+import { stopProxy as stopPrivoxy } from "./utils/proxy";
 import { setProxySettings } from "./systemProxy";
-import { state } from "./state";
-import { checkIP, showNotification } from "./utils";
-import { getAvailablePort } from "./utils/proxy";
-import { ipcMain } from "electron";
-import { getFingerPrintData } from "./utils";
-import { RelayData, ProxyRuleConfig } from "./state";
-import Store  from "electron-store";
-import { EventType, ExtendCircuitOptions, Flag, StreamEvent } from "@anyone-protocol/anyone-client/out/models";
+import { ProxyRuleConfig, RelayData, state } from "./state";
+import { getFingerPrintData, showNotification, checkIP } from "./utils";
+import { ipcMain, app } from "electron";
+import Store from "electron-store";
+import net from "net";
+import fs from "fs";
+import path from "path";
 
 const store = new Store();
 
@@ -29,729 +29,812 @@ export interface ProxyRule {
     hops: number;
     entryCountries: string[];
     exitCountries: string[];
+    enabled?: boolean;
+}
+
+/**
+ * Maps normalized apex domain → VPN target config (without address).
+ * Only populated when the global "matchSubdomains" setting is enabled.
+ */
+const baseDomainTargetMap = new Map<string, Omit<VPNTarget, "address">>();
+
+/** Populate the base-domain map from active VPN targets (only when global setting is on). */
+function populateBaseDomainMap(targets: VPNTarget[]): void {
+    baseDomainTargetMap.clear();
+    if (!store.get("matchSubdomains", false)) return;
+    for (const t of targets) {
+        const apex = t.address.replace(/^www\./, "");
+        if (!baseDomainTargetMap.has(apex)) {
+            baseDomainTargetMap.set(apex, {
+                exitCountries: t.exitCountries,
+                minCircuits: t.minCircuits,
+                maxCircuits: t.maxCircuits,
+                hopCount: t.hopCount,
+            });
+        }
+    }
+}
+
+/**
+ * Return the base domain in `baseDomainTargetMap` that `hostname` is a subdomain of,
+ * or `null` if there is no match.
+ * Examples:
+ *   "google.com"      → "google.com"  (exact)
+ *   "docs.google.com" → "google.com"  (subdomain)
+ *   "evil.com"        → null
+ */
+function findMatchingBaseDomain(hostname: string): string | null {
+    if (baseDomainTargetMap.has(hostname)) return hostname;
+    const parts = hostname.split(".");
+    // Walk from left to right: try docs.google.com, then google.com
+    for (let i = 1; i < parts.length - 1; i++) {
+        const candidate = parts.slice(i).join(".");
+        if (baseDomainTargetMap.has(candidate)) return candidate;
+    }
+    return null;
+}
+
+/** Try the preferred port; if in use, let the OS pick a free one. */
+async function findFreePort(preferred: number): Promise<number> {
+    return new Promise((resolve) => {
+        const server = net.createServer();
+        server.listen(preferred, "127.0.0.1", () => {
+            server.close(() => resolve(preferred));
+        });
+        server.on("error", () => {
+            // preferred port is busy — ask OS for any free port
+            const fallback = net.createServer();
+            fallback.listen(0, "127.0.0.1", () => {
+                const port = (fallback.address() as net.AddressInfo).port;
+                fallback.close(() => resolve(port));
+            });
+            fallback.on("error", () => resolve(preferred)); // last resort
+        });
+    });
+}
+
+/** Download the anyone_hosts DNS mapping file via the SOCKS5 proxy after bootstrap. */
+async function downloadAnonHosts(): Promise<void> {
+    const url = "http://dns-live-1.anyone.anyone/tld/anyone";
+    const destPath = path.join(app.getPath("userData"), "anon-data", "anyone_hosts");
+    try {
+        const response = await state.anonSocksClient.get<string>(url, { responseType: "text" });
+        fs.writeFileSync(destPath, response.data);
+        console.log("anyone_hosts downloaded successfully");
+    } catch (error: any) {
+        console.warn("Failed to download anyone_hosts:", error.message);
+    }
+}
+
+/** Copy the latest consensus files to a backup dir so future fresh installs can seed from them. */
+function updateConsensusBackup() {
+    const userData = app.getPath("userData");
+    const dataDir  = path.join(userData, "anon-data");
+    const backupDir = path.join(userData, "anon-backup");
+    try {
+        fs.mkdirSync(backupDir, { recursive: true });
+        for (const file of ["cached-microdesc-consensus", "cached-certs"]) {
+            const src = path.join(dataDir, file);
+            if (fs.existsSync(src)) {
+                fs.copyFileSync(src, path.join(backupDir, file));
+            }
+        }
+    } catch { /* non-critical */ }
+}
+
+/**
+ * Write a persistent anon config file that points to a fixed DataDirectory.
+ * This lets anon reuse cached descriptors across restarts for faster bootstrap.
+ */
+function createPersistentConfig(socksPort: number, controlPort: number, exePath: string): string {
+    const userData = app.getPath("userData");
+    const persistentDataDir = path.join(userData, "anon-data");
+    const configFilePath = path.join(userData, "anonrc");
+
+    // Derive GeoIP paths from the binary location
+    const binaryDir = path.dirname(exePath);
+    const geoipFile = path.join(binaryDir, "geoip");
+    const geoipV6File = path.join(binaryDir, "geoip6");
+
+    // Ensure the persistent data directory exists
+    fs.mkdirSync(persistentDataDir, { recursive: true });
+
+    // Seed consensus files from the runtime backup if the data dir is fresh.
+    // The backup is written after every successful proxy start so it stays current.
+    const consensusFiles = ["cached-microdesc-consensus", "cached-certs"];
+    const backupDir = path.join(userData, "anon-backup");
+    for (const file of consensusFiles) {
+        const dest = path.join(persistentDataDir, file);
+        const src  = path.join(backupDir, file);
+        if (!fs.existsSync(dest) && fs.existsSync(src)) {
+            try { fs.copyFileSync(src, dest); } catch { /* ignore */ }
+        }
+    }
+
+    // Ensure terms-agreement exists in both the DataDirectory and the binary's
+    // own directory — the anon binary checks its own dir first.
+    const termsLocations = [
+        path.join(persistentDataDir, "terms-agreement"),
+        path.join(binaryDir, "terms-agreement"),
+    ];
+    const termsSource = state.termsFilePath;
+    for (const termsTarget of termsLocations) {
+        if (!fs.existsSync(termsTarget)) {
+            if (termsSource && fs.existsSync(termsSource)) {
+                try { fs.copyFileSync(termsSource, termsTarget); } catch { /* ignore */ }
+            } else {
+                // autoTermsAgreement may have written it to cwd; copy from there
+                const cwdTerms = path.join(process.cwd(), "terms-agreement");
+                if (fs.existsSync(cwdTerms)) {
+                    try { fs.copyFileSync(cwdTerms, termsTarget); } catch { /* ignore */ }
+                } else {
+                    // Last resort: create marker file with required content
+                    try { fs.writeFileSync(termsTarget, "agreed"); } catch { /* ignore */ }
+                }
+            }
+        }
+    }
+
+    const configLines = [
+        `DataDirectory ${persistentDataDir}`,
+        `SOCKSPort ${socksPort}`,
+        `ORPort 0`,
+        `ControlPort ${controlPort}`,
+        ...(fs.existsSync(geoipFile) ? [`GeoIPFile ${geoipFile}`] : []),
+        ...(fs.existsSync(geoipV6File) ? [`GeoIPv6File ${geoipV6File}`] : []),
+    ];
+
+    // Always overwrite — ports change between runs
+    fs.writeFileSync(configFilePath, configLines.join("\n") + "\n");
+
+    return configFilePath;
 }
 
 export async function startAnyoneProxy() {
-  if (state.anon) {
-    console.log("Anyone proxy is already running.");
-    return;
-  }
-
-  try {
-    const fingerprintData = await getFingerPrintData();
-    state.fingerprintData = fingerprintData;
-  } catch (error) {
-    console.error("Error getting fingerprint to geo list:", error);
-    state.mainWindow?.webContents.send(
-      "proxy-error",
-      `\nWhoops! Something went wrong:\n ${error.message}`
-    );
-    state?.tray?.window?.webContents.send(
-      "proxy-error",
-      `\nWhoops! Something went wrong:\n ${error.message}`
-    );
-    return;
-  }
-
-  try {
-    const exePath = state.exePath;
-    const termsFilePath = state.termsFilePath;
-    // const anonPort = await state.anonPort;
-    // const anonControlPort = state.anonControlPort;
-    // state.anonPort = anonPort;
-    // state.anonControlPort = anonControlPort;
-
-    console.log("connecting with anyone port: ", state.anonPort);
-
-    try {
-      if (termsFilePath) {
-        state.anon = new Process({
-          displayLog: false,
-          // socksPort: state.anonPort,
-          // controlPort: state.anonControlPort,
-          binaryPath: exePath,
-          autoTermsAgreement: true,
-          termsFilePath: termsFilePath,
-        });
-      } else {
-        state.anon = new Process({
-          displayLog: false,
-          binaryPath: exePath,
-          autoTermsAgreement: true,
-        });
-      }
-    } catch (error) {
-      console.error("Error creating Anyone process:", error);
-      state.mainWindow?.webContents.send(
-        "proxy-error",
-        `Error creating Anyone process: ${error.message}`
-      );
+    if (state.anon || state.isProxyStarting || state.isProxyStopping) {
+        console.log("Anyone proxy is already running or starting.");
+        return;
     }
-
-    state.anon.on('bootstrap-progress', (event: BootstrapProgressEvent) => {
-      console.log(`Bootstrap progress: ${event.percentage}% - ${event.status}`);
-      state.mainWindow?.webContents.send("proxy-progress", event.percentage, event.status);
-      state.tray?.window?.webContents.send("proxy-progress", event.percentage, event.status);
-    });
-    
-    // Listen to bootstrap complete event
-    state.anon.on('bootstrap-complete', (event) => {
-        console.log('Bootstrap complete');
-        state.mainWindow?.webContents.send("proxy-complete", { complete: true });
-        state.tray?.window?.webContents.send("proxy-complete", { complete: true });
-    });
-
-    state.anonPort = state.anon.getSOCKSPort();
-    state.anonControlPort = state.anon.getControlPort();
-
-    state.anonSocksClient = new Socks(state.anon);
+    state.isProxyStarting = true;
 
     try {
-      await state.anon.start();
+        const exePath = state.exePath;
 
-    } catch (error) {
-      if (error instanceof AnonRunningError) {
-        console.log("Anyone process is already running");
-        state.mainWindow?.webContents.send(
-          "anon-running-error",
-          `Anyone process is already running`
+        // ── Resolve ports ──
+        // With dynamic port OFF (default): use the configured ports as-is so
+        // tools like Firefox that have a hardcoded port keep working.
+        // With dynamic port ON: probe for a free port to avoid bind conflicts.
+        const dynamicPort = store.get("dynamicPort", true) as boolean;
+        const socksPort = dynamicPort ? await findFreePort(state.anonPort) : state.anonPort;
+        const controlPort = dynamicPort ? await findFreePort(state.anonControlPort) : state.anonControlPort;
+        console.log(`Using SOCKS port: ${socksPort}, Control port: ${controlPort} (dynamic: ${dynamicPort})`);
+
+        // ── Start fingerprint fetch in parallel (non-blocking) ──
+        // Proxy start continues regardless of whether this succeeds.
+        // Globe coordinates will simply be unavailable if it fails.
+        const fingerprintPromise = getFingerPrintData()
+            .then((data) => {
+                state.fingerprintData = data ?? new Map();
+            })
+            .catch(() => {
+                // Will retry via proxy after startup; globe coords unavailable until then
+            });
+
+        // ── Create persistent config for cached descriptor reuse ──
+        const configFilePath = createPersistentConfig(socksPort, controlPort, exePath);
+
+        console.log("connecting with anyone port: ", socksPort);
+
+        try {
+            state.anon = new Process({
+                displayLog: false,
+                binaryPath: exePath,
+                socksPort,
+                controlPort,
+                configFile: configFilePath,
+            });
+        } catch (error) {
+            console.error("Error creating Anyone process:", error);
+            state.mainWindow?.webContents.send(
+                "proxy-error",
+                `Error creating Anyone process: ${error.message}`
+            );
+        }
+
+        state.anon.on("bootstrap-progress", (event: BootstrapProgressEvent) => {
+            state.mainWindow?.webContents.send("proxy-progress", event.percentage, event.status);
+            state.tray?.window?.webContents.send("proxy-progress", event.percentage, event.status);
+        });
+
+        // Listen to bootstrap complete event
+        state.anon.on("bootstrap-complete", (event) => {
+            state.mainWindow?.webContents.send("proxy-complete", { complete: true });
+            state.tray?.window?.webContents.send("proxy-complete", { complete: true });
+        });
+
+        state.anonPort = state.anon.getSOCKSPort();
+        state.anonControlPort = state.anon.getControlPort();
+        // Keep proxyPort in sync — system proxy must point to the actual SOCKS port
+        state.proxyPort = state.anonPort;
+        state.mainWindow?.webContents.send("proxy-port-changed", state.proxyPort);
+        state.tray?.window?.webContents.send("proxy-port-changed", state.proxyPort);
+
+        state.anonSocksClient = new Socks(state.anon);
+
+        try {
+            await state.anon.start();
+        } catch (error) {
+            if (error instanceof AnonRunningError) {
+                console.log("Anyone process is already running");
+                state.mainWindow?.webContents.send(
+                    "anon-running-error",
+                    `Anyone process is already running`
+                );
+            } else {
+                console.error("Error starting Anyone process:", error);
+                if (error.message.includes("60 seconds")) {
+                    return;
+                }
+                state.mainWindow?.webContents.send(
+                    "proxy-error",
+                    `Error starting Anyone process: ${error.message}`
+                );
+            }
+            return;
+        }
+        console.log("Anyone proxy started.");
+
+        setProxySettings(true, state.proxyPort);
+        downloadAnonHosts().catch(() => {});
+
+        // Create Control client and authenticate using the actual dynamic port
+        try {
+            state.anonControlClient = new Control('127.0.0.1', state.anonControlPort);
+        } catch (error: any) {
+            console.error("Error creating Anyone control client:", error);
+            state.mainWindow?.webContents.send(
+                "proxy-error",
+                `Error creating control client: ${error.message}`
+            );
+            state.tray?.window?.webContents.send(
+                "proxy-error",
+                `Error creating control client: ${error.message}`
+            );
+            return;
+        }
+
+        // Retry authenticate — the control port may not be ready immediately after start
+        {
+            const maxAttempts = 5;
+            const delays = [1500, 2000, 3000, 4000, 5000];
+            let lastError: any;
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+                try {
+                    await state.anonControlClient.authenticate();
+                    lastError = null;
+                    break;
+                } catch (error: any) {
+                    lastError = error;
+                    console.warn(`Control authenticate attempt ${attempt + 1} failed: ${error.message}`);
+                }
+            }
+            if (lastError) {
+                throw lastError;
+            }
+        }
+
+        // Apply global exit country if configured
+        const globalExitCountry = store.get("globalExitCountry", null) as string | null;
+        if (globalExitCountry) {
+            try {
+                await state.anonControlClient.setConf("ExitNodes", `{${globalExitCountry}}`);
+                await state.anonControlClient.setConf("StrictNodes", "1");
+            } catch (e: any) {
+                if (e?.message?.includes("circuit-status")) {
+                    console.warn("SETCONF interleaved with circuit-status event, command likely succeeded");
+                } else {
+                    throw e;
+                }
+            }
+        }
+
+        // Initialize StateManager (for relay caching, VPNManager handles events)
+        console.log("Initializing StateManager...");
+        state.stateManager = new StateManager(state.anonControlClient, {
+            autoSubscribeEvents: false,  // VPNManager will handle events
+            cacheRelays: true,
+            populateCountries: true,
+        });
+        await state.stateManager.initialize();
+        console.log(`StateManager ready: ${state.stateManager.getRelays().length} relays loaded`);
+
+        const availableCountries = state.stateManager.getAvailableCountries();
+        if (availableCountries.length > 0) {
+            store.set("cachedAvailableCountries", availableCountries);
+        }
+
+        // Give the parallel fingerprint fetch 500 ms to finish (it'll already be done
+        // if the network is fast). If still pending, proceed and let the proxy retry
+        // handle it in the background — fingerprint data is non-critical.
+        await Promise.race([fingerprintPromise, new Promise<void>(r => setTimeout(r, 500))]);
+
+        // Retry via proxy for any case where direct fetch didn't succeed
+        if (!state.fingerprintData || state.fingerprintData.size === 0) {
+            getFingerPrintData(state.anonSocksClient)
+                .then((data) => {
+                    if (data && data.size > 0) {
+                        state.fingerprintData = data;
+                        console.log(`Fingerprint data loaded: ${data.size} relays`);
+                    }
+                })
+                .catch(() => {
+                    console.log("Relay coordinates unavailable — globe will show relays without positions");
+                });
+        }
+
+        // Get relay data for UI
+        const relayData = await getRelayData();
+        state.relayIp = relayData?.ip;
+        state.relayData = relayData;
+        state.numberOfRelays = relayData?.numberOfRelays || 0;
+
+        // Convert proxy rules to VPN targets
+        const vpnTargets = convertProxyRulesToVPNTargets();
+        // Populate base-domain map so subdomain expansion can happen at runtime
+        populateBaseDomainMap(vpnTargets);
+
+        if (vpnTargets.length > 0) {
+            // Initialize VPNManager for routing
+            console.log("Initializing VPNManager...");
+            state.vpnManager = new VPNManager(state.stateManager, {
+                targets: vpnTargets,
+                healthMonitorInterval: 10000, // 10 seconds
+            });
+
+            // Set up VPNManager event listeners
+            setupVPNManagerListeners();
+
+            // Register subdomain STREAM interceptor BEFORE vpnManager.initialize() so
+            // our handler fires first and can attach subdomain streams to existing
+            // parent-rule circuits before VPNManager falls back to default routing.
+            await setupSubdomainStreamInterceptor();
+
+            await state.vpnManager.initialize();
+
+            // Resume background resolution after VPNManager init
+            state.stateManager.resumeBackgroundResolution();
+
+            console.log("VPNManager initialized with targets:", vpnTargets.map(t => t.address));
+        } else {
+            console.log("No proxy rules configured, running without VPNManager");
+            // Resume background resolution even without VPNManager
+            state.stateManager.resumeBackgroundResolution();
+        }
+
+        // Listen to all STREAM events to update circuit flags for any traffic.
+        // Note: "AttachStream failed (551)" warnings from the SDK's event-dispatcher
+        // are a known transient race condition in VPNManager — the stream succeeds on
+        // retry. No action needed; they do not affect functionality.
+        setupStreamCircuitListener();
+
+        state.mainWindow?.webContents.send("proxy-started");
+        state.tray?.window?.webContents.send("proxy-started");
+        state.isProxyRunning = true;
+        state.isProxyStarting = false;
+        showNotification(
+            "Proxy Started",
+            "Your system is now using the Anyone proxy."
         );
-      } else {
-        console.error("Error starting Anyone process:", error);
-        if (error.message.includes("60 seconds")) {
-          return;
-        }
-        state.mainWindow?.webContents.send(
-          "proxy-error",
-            `Error starting Anyone process: ${error.message}`
-          );
-        }
-      return;
-    }
-    console.log("Anyone proxy started.");
+        ipcMain.emit("proxy:stateChanged", true, true);
 
-    // do not start privoxy, use anon directly
-    // state.proxyPort = await startPrivoxy(state.anonPort);
-
-    setProxySettings(true, state.proxyPort);
-
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    try {
-      state.anonControlClient = new Control();
+        // Fetch the proxy IP here in the main process so we don't race against
+        // circuit availability from the renderer side. Push the result via
+        // proxy-ip-changed once the first successful check arrives.
+        checkIP(true).then((ip) => {
+            if (ip) {
+                state.proxyIp = ip;
+                state.mainWindow?.webContents.send("proxy-ip-changed", ip);
+                state.tray?.window?.webContents.send("proxy-ip-changed", ip);
+            }
+        }).catch(() => {});
     } catch (error: any) {
-      console.error("Error creating Anyone control client:", error);
-      state.mainWindow?.webContents.send(
-        "proxy-error",
-        `Error creating control client: ${error.message}`
-      );
-      state.tray?.window?.webContents.send(
-        "proxy-error",
-        `Error creating control client: ${error.message}`
-      );
+        console.log("Error starting Anyone proxy:", error);
+        state.mainWindow?.webContents.send(
+            "proxy-error",
+            `Error starting proxy: ${error.message}`
+        );
+        state.tray?.window?.webContents.send(
+            "proxy-error",
+            `Error starting proxy: ${error.message}`
+        );
+        state.anon = null;
+        state.anonSocksClient = null;
+        state.stateManager = null;
+        state.vpnManager = null;
+        state.isProxyStarting = false;
+        await stopPrivoxy();
+        setProxySettings(false, state.proxyPort);
+        showNotification("Proxy Error", `Failed to start proxy: ${error.message}`);
+    } finally {
+        state.isProxyStarting = false;
     }
-    await state.anonControlClient.authenticate();
-
-    const socksIp = await checkIP(true);
-    state.proxyIp = socksIp;
-    ipcMain.emit("proxy:stateChanged", socksIp);
-    const relayData = await getRelayData();
-    state.relayIp = relayData.ip;
-    state.relayData = relayData;
-    state.numberOfRelays = relayData.numberOfRelays;
-
-    await createRoutingMap(); // THIS IS WHERE THE ROUTUING MAP IS CREATED
-
-    // Start circuit monitoring
-    await startCircuitMonitoring();
-
-    state.mainWindow?.webContents.send("proxy-started");
-    state.tray?.window?.webContents.send("proxy-started");
-    state.isProxyRunning = true;
-    showNotification(
-      "Proxy Started",
-      "Your system is now using the Anyone proxy."
-    );
-    // ipcmain send even proxy:stateChanged
-    ipcMain.emit("proxy:stateChanged", true, true);
-  } catch (error: any) {
-    console.log("Error starting Anyone proxy:", error);
-    state.mainWindow?.webContents.send(
-      "proxy-error",
-      `Error starting proxy: ${error.message}`
-    );
-    state.tray?.window?.webContents.send(
-      "proxy-error",
-      `Error starting proxy: ${error.message}`
-    );
-    state.anon = null;
-    state.anonSocksClient = null;
-    await stopPrivoxy();
-    setProxySettings(false, state.proxyPort);
-    showNotification("Proxy Error", `Failed to start proxy: ${error.message}`);
-  }
 }
 
-export async function getRelayData() {
-  let circuitRetries = 3;
-  let relayInfoRetries = 2;
-  let lastError = null;
+function convertProxyRulesToVPNTargets(): VPNTarget[] {
+    const proxyRules = store.get('proxyRules', []) as ProxyRule[];
 
-  while (circuitRetries > 0) {
-    try {
-      const circuits = await getCircuitStatusWithRetry();
-      console.log('Got circuit status');
-      
-      // If we get here, we successfully got the circuit status
-      for (const circuit of circuits) {
-        const nodes = circuit.relays;
-        if (nodes && nodes.length > 0) {
-          const fingerprint = nodes[0].fingerprint;
-          let relayInfoAttempts = relayInfoRetries;
-          
-          while (relayInfoAttempts > 0) {
-            try {
-              const relayInfo = await state.anonControlClient.getRelayInfo(fingerprint);
-              const nickname = relayInfo.nickname;
-              const ip = relayInfo.ip;
-              const locationData = state.fingerprintData.get(fingerprint);
-              return {
-                ip,
-                fingerprint,
-                nickname,
-                coordinates: locationData?.coordinates,
-                hexId: locationData?.hexID,
-                numberOfRelays: circuits.length,
-              } as RelayData;
-            } catch (relayError) {
-              console.log(`Error getting relay info (attempt ${relayInfoRetries - relayInfoAttempts + 1}/${relayInfoRetries}):`, relayError);
-              lastError = relayError;
-              relayInfoAttempts--;
-              if (relayInfoAttempts === 0) break;
-              // await new Promise(resolve => setTimeout(resolve, 1000));
-              continue;
-            }
-          }
+    // Also store in state for backwards compatibility
+    state.proxyRuleConfig = {
+        routings: proxyRules.flatMap(rule =>
+            rule.destinations.map(destination => ({
+                targetAddress: destination,
+                hops: rule.hops,
+                entryCountries: rule.entryCountries,
+                exitCountries: rule.exitCountries,
+            }))
+        )
+    } as ProxyRuleConfig;
+
+    const vpnTargets: VPNTarget[] = [];
+    for (const rule of proxyRules) {
+        if (rule.enabled === false) continue;
+        for (const destination of rule.destinations) {
+            vpnTargets.push({
+                address: destination,
+                exitCountries: rule.exitCountries.map(c => c.toLowerCase()),
+                minCircuits: 1,
+                maxCircuits: 3,
+                hopCount: rule.hops as 2 | 3,
+            });
         }
-      }
-      
-      // If we get here, no circuits had relays or we couldn't get relay info
-      circuitRetries--;
-      if (circuitRetries === 0) break;
-      console.log(`No valid circuits found, retrying... (${circuitRetries} attempts left)`);
-      // await new Promise(resolve => setTimeout(resolve, 2000));
-    } catch (error: any) {
-      console.log(`Error getting circuit status (attempt ${4-circuitRetries}/3):`, error);
-      lastError = error;
-      circuitRetries--;
-      if (circuitRetries === 0) break;
-      console.log(`Retrying in 2 seconds... (${circuitRetries} attempts left)`);
-      // await new Promise(resolve => setTimeout(resolve, 2000));
     }
-  }
 
-  console.log("Failed to get relay data after multiple attempts:", lastError);
-  state.mainWindow?.webContents.send(
-    "proxy-error",
-    `Error getting relay data: ${lastError?.message || 'Unknown error'}`
-  );
-  state.tray?.window?.webContents.send(
-    "proxy-error",
-    `Error getting relay data: ${lastError?.message || 'Unknown error'}`
-  );
+    return vpnTargets;
+}
+
+/**
+ * Register a STREAM event handler BEFORE VPNManager.initialize() so our handler
+ * fires first in the listener queue (handlers are called in registration order).
+ *
+ * When a STREAM NEW event arrives for a subdomain (e.g. docs.google.com) that
+ * matches a rule destination (google.com), we attach it directly to one of the
+ * parent target's already-built circuits instead of letting VPNManager fall back
+ * to default (circuit 0) routing. This means subdomain traffic is correctly
+ * routed even on the very first visit.
+ *
+ * After attaching, VPNManager's own handler fires and gets a 551 "already
+ * attached" response — the same transient race condition that already exists and
+ * is documented as harmless.
+ */
+async function setupSubdomainStreamInterceptor() {
+    if (!state.anonControlClient || !state.vpnManager) return;
+
+    const subdomainHandler = async (event: StreamEvent) => {
+        if (event.status !== "NEW" || !event.streamId || baseDomainTargetMap.size === 0) return;
+
+        const target = (event.target ?? "").split(":")[0];
+        if (!target) return;
+
+        // If the target is already a known VPN target let VPNManager handle it normally
+        const internalTargets = (state.vpnManager as any).targets as VPNTarget[];
+        if (internalTargets.some((t) => t.address === target)) return;
+
+        // Check for parent-domain match
+        const matchedBase = findMatchingBaseDomain(target);
+        if (!matchedBase) return;
+
+        // Find built circuits for the parent rule destination
+        const circuits: Map<number, any> = (state.vpnManager as any).circuits;
+        const parentCircuits = Array.from(circuits.values()).filter(
+            (c) => c.status === "BUILT" && c.target === matchedBase
+        );
+
+        if (parentCircuits.length === 0) {
+            // No circuits built yet (e.g. very early in startup) — VPNManager's
+            // default routing will handle this stream; future visits will succeed.
+            return;
+        }
+
+        // Pick the least-loaded circuit
+        const circuit = parentCircuits.reduce((a, b) =>
+            (a.streamCount ?? 0) <= (b.streamCount ?? 0) ? a : b
+        );
+
+        try {
+            const attached = await state.anonControlClient.attachStream(event.streamId, circuit.id);
+            if (attached) {
+                console.log(
+                    `[subdomain] ${target} → reused circuit ${circuit.id} (rule: ${matchedBase})`
+                );
+                // Register subdomain as an explicit target so VPNManager tracks it
+                // natively from now on (avoids per-stream overhead on future visits)
+                if (!internalTargets.some((t) => t.address === target)) {
+                    const config = baseDomainTargetMap.get(matchedBase)!;
+                    internalTargets.push({ address: target, ...config });
+                }
+            }
+        } catch {
+            // 551 = already attached by VPNManager, or stream closed — both are harmless
+        }
+    };
+
+    await state.anonControlClient.addEventListener(subdomainHandler, EventType.STREAM);
+}
+
+interface HopDetail {
+    fingerprint: string;
+    nickname: string;
+    ip: string;
+    country: string;
+    bandwidth: number;
+    flags: string[];
+}
+
+interface CircuitData {
+    countries: string[];
+    coordinates: Array<{ latitude: number; longitude: number } | null>;
+    hopDetails: HopDetail[];
+}
+const circuitPathMap = new Map<number, CircuitData>(); // circuitId → hop data
+let lastSentCircuitId: number | null = null;
+
+function setupVPNManagerListeners() {
+    if (!state.vpnManager) return;
+    circuitPathMap.clear();
+    lastSentCircuitId = null;
+
+    state.vpnManager.on(VPNManagerEvent.TARGET_READY, (info) => {
+        state.mainWindow?.webContents.send("circuit-ready", {
+            target: info.target,
+            circuitId: info.circuitId,
+            country: info.country,
+            timestamp: new Date().toISOString()
+        });
+        state.tray?.window?.webContents.send("circuit-ready", {
+            target: info.target,
+            circuitId: info.circuitId,
+            country: info.country,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    state.vpnManager.on(VPNManagerEvent.TARGET_DEGRADED, (info) => {
+        state.mainWindow?.webContents.send("circuit-failure", {
+            target: info.target,
+            currentCircuits: info.currentCircuits,
+            minCircuits: info.minCircuits,
+            timestamp: new Date().toISOString()
+        });
+        state.tray?.window?.webContents.send("circuit-failure", {
+            target: info.target,
+            currentCircuits: info.currentCircuits,
+            minCircuits: info.minCircuits,
+            timestamp: new Date().toISOString()
+        });
+    });
+}
+
+async function setupStreamCircuitListener() {
+    if (!state.anonControlClient) return;
+
+    const resolvingCircuits = new Set<number>(); // prevent duplicate async resolutions
+
+    const streamHandler = async (event: StreamEvent) => {
+        if (event.status !== 'SUCCEEDED' || !event.circId) return;
+        const circId = event.circId;
+        if (circId === lastSentCircuitId) return;
+
+        // Resolve countries for this circuit if not already cached
+        if (!circuitPathMap.has(circId) && !resolvingCircuits.has(circId)) {
+            resolvingCircuits.add(circId);
+            try {
+                const circuitStatus = await state.anonControlClient.getCircuit(circId);
+                if (circuitStatus?.relays?.length) {
+                    const hopCountries: string[] = [];
+                    const hopCoordinates: Array<{ latitude: number; longitude: number } | null> = [];
+                    const hopDetails: HopDetail[] = [];
+                    for (const relay of circuitStatus.relays) {
+                        try {
+                            const relayInfo = await state.anonControlClient.getRelayInfo(relay.fingerprint);
+                            const country = relayInfo?.ip
+                                ? await state.anonControlClient.getCountry(relayInfo.ip)
+                                : null;
+                            const cc = country?.toUpperCase() ?? '??';
+                            hopCountries.push(cc);
+                            hopDetails.push({
+                                fingerprint: relay.fingerprint,
+                                nickname: relayInfo?.nickname ?? relay.nickname ?? '?',
+                                ip: relayInfo?.ip ?? '?',
+                                country: cc,
+                                bandwidth: relayInfo?.bandwidth ?? 0,
+                                flags: (relayInfo?.flags ?? []).map(String),
+                            });
+                        } catch {
+                            hopCountries.push('??');
+                            hopDetails.push({
+                                fingerprint: relay.fingerprint,
+                                nickname: relay.nickname ?? '?',
+                                ip: '?',
+                                country: '??',
+                                bandwidth: 0,
+                                flags: [],
+                            });
+                        }
+                        const coordData = state.fingerprintData?.get(relay.fingerprint);
+                        hopCoordinates.push(coordData?.coordinates ?? null);
+                    }
+                    circuitPathMap.set(circId, { countries: hopCountries, coordinates: hopCoordinates, hopDetails });
+                }
+            } catch {
+                // circuit may have closed already
+            } finally {
+                resolvingCircuits.delete(circId);
+            }
+        }
+
+        const circuitData = circuitPathMap.get(circId);
+        if (!circuitData?.countries.length) return;
+        if (circId === lastSentCircuitId) return; // recheck after await
+
+        lastSentCircuitId = circId;
+        const payload = {
+            circuitId: circId,
+            target: event.target ?? '',
+            hopCountries: circuitData.countries,
+            hopCoordinates: circuitData.coordinates,
+            hopDetails: circuitData.hopDetails,
+        };
+        state.mainWindow?.webContents.send("circuit-path-updated", payload);
+        state.tray?.window?.webContents.send("circuit-path-updated", payload);
+    };
+
+    await state.anonControlClient.addEventListener(streamHandler, EventType.STREAM);
+}
+
+export async function getRelayData(): Promise<RelayData | null> {
+    try {
+        // Use StateManager's relay cache if available
+        if (state.stateManager && state.stateManager.isReady()) {
+            const relays = state.stateManager.getRelays();
+            const guards = state.stateManager.getGuards();
+
+            if (guards.length > 0) {
+                const relay = guards[0];
+                const locationData = state.fingerprintData?.get(relay.fingerprint);
+                return {
+                    ip: relay.ip,
+                    fingerprint: relay.fingerprint,
+                    nickname: relay.nickname,
+                    coordinates: locationData?.coordinates,
+                    hexId: locationData?.hexID,
+                    numberOfRelays: relays.length,
+                } as RelayData;
+            }
+        }
+
+        // Fallback to direct control client query
+        if (!state.anonControlClient) {
+            return null;
+        }
+
+        const circuits = await state.anonControlClient.circuitStatus();
+
+        for (const circuit of circuits) {
+            const nodes = circuit.relays;
+            if (nodes && nodes.length > 0) {
+                const fingerprint = nodes[0].fingerprint;
+                try {
+                    const relayInfo = await state.anonControlClient.getRelayInfo(fingerprint);
+                    const locationData = state.fingerprintData?.get(fingerprint);
+                    return {
+                        ip: relayInfo.ip,
+                        fingerprint,
+                        nickname: relayInfo.nickname,
+                        coordinates: locationData?.coordinates,
+                        hexId: locationData?.hexID,
+                        numberOfRelays: circuits.length,
+                    } as RelayData;
+                } catch (relayError) {
+                    console.log('Error getting relay info:', relayError);
+                    continue;
+                }
+            }
+        }
+    } catch (error: any) {
+        console.log("Failed to get relay data:", error);
+        state.mainWindow?.webContents.send(
+            "proxy-error",
+            `Error getting relay data: ${error?.message || 'Unknown error'}`
+        );
+        state.tray?.window?.webContents.send(
+            "proxy-error",
+            `Error getting relay data: ${error?.message || 'Unknown error'}`
+        );
+    }
+
+    return null;
 }
 
 export async function stopAnyoneProxy() {
-  if (!state.anon) {
-    console.log("Anyone proxy is not running.");
-    return;
-  }
-  
-  // Stop circuit monitoring
-  if (state.circuitMonitorInterval) {
-    clearInterval(state.circuitMonitorInterval);
-    state.circuitMonitorInterval = null;
-  }
-  
-  setProxySettings(false, state.proxyPort);
-  if (state.anonControlClient) {
-    state.anonControlClient.end();
-  }
-
-  try {
-    await state.anon.stop();
-    console.log("Anyone proxy stopped.");
-
-    await stopPrivoxy();
-
-    state.isProxyRunning = false;
-    state.relayIp = "-";
-    state.relayData = null;
-
-    state.mainWindow?.webContents.send("proxy-stopped");
-    state.tray?.window?.webContents.send("proxy-stopped");
-    ipcMain.emit("proxy:stateChanged", false, false);
-  } catch (error: any) {
-    console.log("Error stopping Anyone proxy:", error);
-    state.mainWindow?.webContents.send(
-      "proxy-error",
-      `Error stopping proxy: ${error.message}`
-    );
-    state.tray?.window?.webContents.send(
-      "proxy-error",
-      `Error stopping proxy: ${error.message}`
-    );
-  } finally {
-    state.anon = null;
-    state.anonSocksClient = null;
-  }
-}
-
-// Circuit failure detection and handling
-async function handleCircuitFailure(failedCircuitId: string, target: string) {
-  console.log(`Handling circuit failure for circuit ${failedCircuitId} targeting ${target}`);
-  
-  try {
-    // Remove the failed circuit from routing map if it exists
-    const targetAddress = target.split(':')[0];
-    if (state.routingMap[targetAddress] === parseInt(failedCircuitId)) {
-      
-      delete state.routingMap[targetAddress];
-      console.log(`Removed failed circuit ${failedCircuitId} from routing map for ${targetAddress}`);
-      
-      // Notify UI about circuit failure
-      state.mainWindow?.webContents.send("circuit-failure", {
-        circuitId: failedCircuitId,
-        target: targetAddress,
-        timestamp: new Date().toISOString()
-      });
-      state.tray?.window?.webContents.send("circuit-failure", {
-        circuitId: failedCircuitId,
-        target: targetAddress,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Attempt to recreate the circuit
-      await recreateCircuitForTarget(targetAddress);
-    }
-  } catch (error) {
-    console.error(`Error handling circuit failure for ${failedCircuitId}:`, error);
-  }
-}
-
-// Recreate circuit for a specific target
-async function recreateCircuitForTarget(targetAddress: string) {
-  try {
-    const route = state.proxyRuleConfig.routings.find(r => r.targetAddress === targetAddress);
-    if (!route) {
-      console.error(`No route configuration found for ${targetAddress}`);
-      return;
-    }
-    
-    console.log(`Recreating circuit for ${targetAddress}`);
-    
-    // Get fresh relay lists
-    const relays = await state.anonControlClient.getRelays();
-    let exits = state.anonControlClient.filterRelaysByFlags(relays, Flag.Exit);
-    let guards = state.anonControlClient.filterRelaysByFlags(relays, Flag.Guard);
-    let middleRelays = state.anonControlClient.filterRelaysByFlags(relays, Flag.Stable)
-      .filter(relay => 
-        relay.flags.includes(Flag.Stable) &&
-        relay.flags.includes(Flag.Running) &&
-        !relay.flags.includes(Flag.Exit) &&
-        !relay.flags.includes(Flag.Guard)
-      );
-    
-    // Filter out bad exits
-    exits = exits.filter((exit) => !exit.flags.includes(Flag.BadExit));
-    
-    // Get exit node based on country requirements
-    const exitsByCountry = exits.filter((exit) => 
-      route.exitCountries.some((country) => exit.country?.toLowerCase() === country.toLowerCase())
-    );
-    
-    if (exitsByCountry.length === 0) {
-      console.error(`No exits found for countries: ${route.exitCountries.join(', ')}`);
-      return;
-    }
-    
-    const exit = exitsByCountry[Math.floor(Math.random() * exitsByCountry.length)];
-    const guard = guards[Math.floor(Math.random() * guards.length)];
-    
-    // Create new path
-    const path = [guard.fingerprint];
-    for (let i = 0; i < route.hops - 2; i++) {
-      const availableMiddleRelays = middleRelays.filter(relay => 
-        !path.includes(relay.fingerprint)
-      );
-      
-      if (availableMiddleRelays.length === 0) {
-        console.error('No available middle relays for path');
+    if (!state.anon) {
+        console.log("Anyone proxy is not running.");
         return;
-      }
-      
-      const middle = availableMiddleRelays[Math.floor(Math.random() * availableMiddleRelays.length)];
-      path.push(middle.fingerprint);
     }
-    path.push(exit.fingerprint);
-    
-    const options: ExtendCircuitOptions = {
-      circuitId: 0,
-      serverSpecs: path,
-      purpose: "general",
-      awaitBuild: true
-    };
-    
-    const newCircuitId = await state.anonControlClient.extendCircuit(options);
-    state.routingMap[targetAddress] = newCircuitId;
-    
-    console.log(`Successfully recreated circuit ${newCircuitId} for ${targetAddress}`);
-    
-    // Notify UI about circuit recreation
-    state.mainWindow?.webContents.send("circuit-recreated", {
-      oldCircuitId: targetAddress,
-      newCircuitId: newCircuitId,
-      target: targetAddress,
-      timestamp: new Date().toISOString()
-    });
-    state.tray?.window?.webContents.send("circuit-recreated", {
-      oldCircuitId: targetAddress,
-      newCircuitId: newCircuitId,
-      target: targetAddress,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error(`Failed to recreate circuit for ${targetAddress}:`, error);
-  }
-}
+    state.isProxyStopping = true;
 
-// Robust circuit status checking with retries
-async function getCircuitStatusWithRetry(maxRetries: number = 3): Promise<any[]> {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const circuits = await state.anonControlClient.circuitStatus();
-      return circuits;
-    } catch (error) {
-      console.log(`Circuit status attempt ${attempt}/${maxRetries} failed:`, error.message);
-      
-      if (error.message.includes('Invalid response format')) {
-        if (attempt === maxRetries) {
-          console.log('Max retries reached for circuit status, returning empty array');
-          return [];
-        }
-        // Wait a bit before retrying
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        continue;
-      }
-      
-      if (error.message.includes('Connection refused') || error.message.includes('ECONNREFUSED')) {
-        console.log('Control connection lost, attempting to reconnect...');
+    baseDomainTargetMap.clear();
+    setProxySettings(false, state.proxyPort);
+
+    // Stop background resolution first
+    if (state.stateManager) {
+        state.stateManager.stopBackgroundResolution();
+    }
+
+    // Shutdown VPNManager
+    if (state.vpnManager) {
         try {
-          await state.anonControlClient.authenticate();
-          console.log('Control connection re-established, retrying circuit status');
-          // Try again after reconnection
-          const circuits = await state.anonControlClient.circuitStatus();
-          return circuits;
-        } catch (reconnectError) {
-          console.error('Failed to reconnect:', reconnectError);
-          if (attempt === maxRetries) {
-            throw new Error('Failed to reconnect control client after multiple attempts');
-          }
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          continue;
+            await state.vpnManager.shutdown();
+        } catch (e) {
+            console.error("Error shutting down VPNManager:", e);
         }
-      }
-      
-      // For other errors, throw immediately
-      throw error;
+        state.vpnManager = null;
     }
-  }
-  
-  return [];
-}
 
-// Periodic circuit health monitoring
-async function startCircuitMonitoring() {
-  const monitorInterval = setInterval(async () => {
-    if (!state.isProxyRunning || !state.anonControlClient) {
-      clearInterval(monitorInterval);
-      return;
-    }
-    
-    console.log('Checking circuit status');
-    try {
-      const circuits = await getCircuitStatusWithRetry();
-      const failedCircuits = circuits.filter(circuit => 
-        circuit.state === 'FAILED' || circuit.state === 'CLOSED'
-      );
-      if (failedCircuits.length > 0) {
-        console.log(`Found ${failedCircuits.length} failed/closed circuits:`, failedCircuits.map(c => c.circuitId));
-        
-        for (const failedCircuit of failedCircuits) {
-          // Find which target this circuit was serving
-          const targetAddress = Object.keys(state.routingMap).find(
-            target => state.routingMap[target] === failedCircuit.circuitId
-          );
-          
-          if (targetAddress) {
-            console.log(`Circuit ${failedCircuit.circuitId} failed for target ${targetAddress}`);
-            await handleCircuitFailure(failedCircuit.circuitId.toString(), targetAddress);
-          }
-
-        }
-      }
-    } catch (error) {
-      console.error('Error in circuit monitoring:', error);
-      
-      // Handle specific error types
-      if (error.message.includes('Invalid response format')) {
-        console.log('Control connection may be unstable, will retry on next interval');
-        // Don't throw - just log and continue monitoring
-        return;
-      }
-      
-      if (error.message.includes('Connection refused') || error.message.includes('ECONNREFUSED')) {
-        console.log('Control connection lost, attempting to reconnect...');
+    // Shutdown StateManager
+    if (state.stateManager) {
         try {
-          // Try to re-authenticate the control connection
-          await state.anonControlClient.authenticate();
-          console.log('Control connection re-established');
-        } catch (reconnectError) {
-          console.error('Failed to reconnect control client:', reconnectError);
-          // If we can't reconnect, the proxy might need to be restarted
-          state.mainWindow?.webContents.send("proxy-error", "Control connection lost. Please restart the proxy.");
-          state.tray?.window?.webContents.send("proxy-error", "Control connection lost. Please restart the proxy.");
+            await state.stateManager.shutdown();
+        } catch (e) {
+            console.error("Error shutting down StateManager:", e);
         }
-        return;
-      }
-      
-      // For other errors, log but don't stop monitoring
-      console.log('Circuit monitoring will continue despite error');
+        state.stateManager = null;
     }
-  }, 5000); // Check every 5 seconds
-  
-  // Store the interval ID for cleanup
-  state.circuitMonitorInterval = monitorInterval;
-}
 
-async function createRoutingMap() {
-  const relays = await state.anonControlClient.getRelays();
-  let exits = state.anonControlClient.filterRelaysByFlags(relays, Flag.Exit);
-  let guards = state.anonControlClient.filterRelaysByFlags(relays, Flag.Guard);
-  let middleRelays = state.anonControlClient.filterRelaysByFlags(relays, Flag.Stable)
-    .filter(relay => 
-      relay.flags.includes(Flag.Stable) &&
-      relay.flags.includes(Flag.Running) &&
-      !relay.flags.includes(Flag.Exit) && // not Exit allowed for middle
-      !relay.flags.includes(Flag.Guard) // not Guard allowed for middle
-    );
-  
-  // import the routing map from the store
-  const proxyRules = store.get('proxyRules', []) as ProxyRule[];
-  const proxyRuleConfig = {
-    routings: proxyRules.flatMap(rule => 
-      rule.destinations.map(destination => ({
-        targetAddress: destination,
-        hops: rule.hops,
-        entryCountries: rule.entryCountries,
-        exitCountries: rule.exitCountries,
-      }))
-    )
-  } as ProxyRuleConfig;
-
-  state.proxyRuleConfig = proxyRuleConfig;
-  const routingMap: Record<string, number> = {};
-
-  // Filter out bad exits
-  exits = exits.filter((exit) => !exit.flags.includes(Flag.BadExit));
-  console.log('Available exits:', exits.length);
-
-  // populate country field
-  let retries = 3;
-  let success = false;
-  while (retries > 0 && !success) {
-    try {
-      await state.anonControlClient.populateCountries(exits);
-      success = true;
-    } catch (error) {
-      console.log(`GeoIP data not loaded, retrying... (${retries} attempts left)`);
-      retries--;
-      if (retries === 0) {
-        throw new Error('Failed to load GeoIP data after multiple attempts');
-      }
-      await new Promise(resolve => setTimeout(resolve, 2000));
+    // Close control connection
+    if (state.anonControlClient) {
+        try {
+            state.anonControlClient.end();
+        } catch (e) {
+            console.error("Error closing control client:", e);
+        }
+        state.anonControlClient = null;
     }
-  }
 
-  console.log('Available guards:', guards.length);
-  console.log('Available middle relays:', middleRelays.length);
-
-  for (const route of state.proxyRuleConfig.routings) {
     try {
-      // Get exit node based on country requirements
-      const exitsByCountry = exits.filter((exit) => 
-        route.exitCountries.some((country) => exit.country?.toLowerCase() === country.toLowerCase())
-      );
-      
-      if (exitsByCountry.length === 0) {
-        console.error(`No exits found for countries: ${route.exitCountries.join(', ')}`);
-        continue;
-      }
+        // Snapshot the freshest consensus before the process exits
+        updateConsensusBackup();
+        try {
+            await state.anon.stop();
+        } catch (stopErr) {
+            // stop() failed — force-kill as fallback
+            try { await Process.killAnonProcess(); } catch (_) {}
+        }
+        console.log("Anyone proxy stopped.");
 
-      const exit = exitsByCountry[Math.floor(Math.random() * exitsByCountry.length)];
-      
-      // // Get entry guard
-      // const guardsByCountry = guards.filter((guard) => 
-      //   !route.entryCountries.some((country) => guard.country?.toLowerCase() === country.toLowerCase())
-      // );
-      
-      // if (guardsByCountry.length === 0) {
-      //   console.error(`No guards found excluding countries: ${route.entryCountries.join(', ')}`);
-      //   continue;
-      // }
+        await stopPrivoxy();
 
-      // const guard = guardsByCountry[Math.floor(Math.random() * guardsByCountry.length)];
-      const guard = guards[Math.floor(Math.random() * guards.length)];
+        state.isProxyRunning = false;
+        state.relayIp = "-";
+        state.relayData = null;
 
-      // Create path with middle relays based on hop count
-      const path = [guard.fingerprint];
-      
-      // Add middle relays if needed (hops - 2 because we already have guard and exit)
-      for (let i = 0; i < route.hops - 2; i++) {
-        const availableMiddleRelays = middleRelays.filter(relay => 
-          !path.includes(relay.fingerprint)
+        state.mainWindow?.webContents.send("proxy-stopped");
+        state.tray?.window?.webContents.send("proxy-stopped");
+        ipcMain.emit("proxy:stateChanged", false, false);
+    } catch (error: any) {
+        console.log("Error stopping Anyone proxy:", error);
+        state.mainWindow?.webContents.send(
+            "proxy-error",
+            `Error stopping proxy: ${error.message}`
         );
-        
-        if (availableMiddleRelays.length === 0) {
-          console.error('No available middle relays for path');
-          continue;
-        }
-        
-        const middle = availableMiddleRelays[Math.floor(Math.random() * availableMiddleRelays.length)];
-        path.push(middle.fingerprint);
-      }
-      
-      path.push(exit.fingerprint);
-
-      console.log(`Created path for ${route.targetAddress} with ${route.hops} hops:`, path);
-
-      const options: ExtendCircuitOptions = {
-        circuitId: 0,
-        serverSpecs: path,
-        purpose: "general",
-        awaitBuild: true
-      };
-
-      const circuitId = await state.anonControlClient.extendCircuit(options);
-      const circ = await state.anonControlClient.getCircuit(circuitId);
-      routingMap[route.targetAddress] = circuitId;
-      console.log('Circuit created:', circuitId);
-    } catch (error) {
-      console.error(`Failed to create circuit for ${route.targetAddress}:`, error);
-      continue;
+        state.tray?.window?.webContents.send(
+            "proxy-error",
+            `Error stopping proxy: ${error.message}`
+        );
+    } finally {
+        state.anon = null;
+        state.anonSocksClient = null;
+        state.isProxyStarting = false;  // clear if stop was called during a start
+        state.isProxyStopping = false;
     }
-  }
-
-  state.routingMap = routingMap;
-  console.log('Final routing map:', routingMap);
-
-  await state.anonControlClient.disableStreamAttachment();
-
-  const eventListener = async (event: StreamEvent) => {
-    try {
-      // console.log('Stream event:', event);
-      
-      // Detect circuit failures through REMAP events
-      if (event.status === 'REMAP') {
-        console.log(`Circuit failure detected: Stream ${event.streamId} remapped from circuit ${event.circId} to new circuit`);
-        handleCircuitFailure(event.circId, event.target);
-      }
-      
-      if (event.status === 'NEW') {
-        const targetAddress = event.target.split(':')[0];
-        // console.log('event', event);
-        
-        // Check if the target address matches any key in the routing map using includes
-        let circuitId: number | undefined;
-        for (const [key, value] of Object.entries(state.routingMap)) {
-          if (targetAddress.includes(key) || key.includes(targetAddress)) {
-            circuitId = value;
-            break;
-          }
-        }
-        
-        console.log('circuitId', circuitId);
-        // console.log('routingMap', state.routingMap);
-
-        if (circuitId && (event.circId === '0' || event.circId === undefined)) {
-          console.log('Attaching stream to circuit in routing map:', circuitId);
-          try {
-            await state.anonControlClient.attachStream(event.streamId, circuitId);
-          } catch (error) {
-            console.error(`Failed to attach stream ${event.streamId} to circuit ${circuitId}:`, error);
-            // Continue processing other streams even if this one fails
-          }
-        } else {
-          let circuits;
-          let retries = 3;
-          let success = false;
-          
-          while (retries > 0 && !success) {
-            try {
-              circuits = await state.anonControlClient.circuitStatus();
-              
-              if (!circuits || circuits.length === 0) {
-                throw new Error('No circuits found in response');
-              }
-              
-              success = true;
-            } catch (error) {
-              console.log(`Error getting circuit status (attempt ${4-retries}/3):`, error.message);
-              if (error.message.includes('Failed to get relay address')) {
-                console.log('Got circuit status but failed to get relay info, proceeding with available data');
-                success = true;
-              } else {
-                retries--;
-                if (retries === 0) {
-                  console.error('Failed to get circuit status after multiple attempts:', error);
-                  return;
-                }
-                await new Promise(resolve => setTimeout(resolve, 2000));
-              }
-            }
-          }
-          
-          const openCircuits = circuits.filter(circuit => 
-            circuit.state === 'BUILT' && 
-            circuit.purpose === 'GENERAL' &&
-            circuit.relays.length === 3
-          );
-          
-          if (openCircuits.length > 0) {
-            const randomCircuit = openCircuits[Math.floor(Math.random() * openCircuits.length)];
-            console.log(`Found ${openCircuits.length} open circuits, randomly selected circuit ${randomCircuit.circuitId}`);
-            try {
-              await state.anonControlClient.attachStream(event.streamId, randomCircuit.circuitId);
-            } catch (error) {
-              console.error(`Failed to attach stream ${event.streamId} to random circuit ${randomCircuit.circuitId}:`, error);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error in stream event listener:', error);
-      // Don't let individual stream errors crash the entire listener
-    }
-  };
-
-  try {
-    await state.anonControlClient.addEventListener(
-      eventListener, 
-      EventType.STREAM
-    );
-  } catch (error) {
-    console.error('Failed to register stream event listener:', error);
-    // Continue without stream routing if listener registration fails
-  }
 }
-

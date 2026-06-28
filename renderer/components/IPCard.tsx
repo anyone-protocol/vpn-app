@@ -14,6 +14,7 @@ import {
   VStack,
   HStack,
   Select,
+  Switch,
 } from "@chakra-ui/react";
 import { motion } from "framer-motion";
 import { TbCopy, TbCopyCheck } from "react-icons/tb";
@@ -46,6 +47,7 @@ const mockRules: Rule[] = [
     hops: 3,
     entryCountries: ['All'],
     exitCountries: ['All'],
+    enabled: true,
   },
   {
     id: '2',
@@ -54,6 +56,7 @@ const mockRules: Rule[] = [
     hops: 2,
     entryCountries: ['US', 'UK', 'CA'],
     exitCountries: ['FR', 'DE', 'NL'],
+    enabled: true,
   },
 ];
 
@@ -77,6 +80,8 @@ const IPCard: React.FC<IPCardProps> = ({
     handleAddProxyRule,
     handleDeleteProxyRule,
     handleEditProxyRule,
+    handleToggleProxyRule,
+    handleToggleAllProxyRules,
   } = useAppContext();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { 
@@ -237,31 +242,6 @@ const IPCard: React.FC<IPCardProps> = ({
             bg={"rgba(24, 24, 27, 0.90"}
             boxShadow={"0px 1px 0px 0px rgba(255, 255, 255, 0.08) inset"}
           >
-            <Flex
-              mb={2}
-              justifyContent={"space-between"}
-              alignItems={"center"}
-              position={"relative"}
-              marginBottom="5px"
-            >
-              <Box
-                position="absolute"
-                bottom={0}
-                left={0}
-                width="100%"
-                height="1px"
-                background="linear-gradient(to right, rgba(22, 81, 103, 0), rgba(22, 81, 103, 0.8), rgba(22, 81, 103, 0))"
-              />
-              <Text
-                fontWeight="400"
-                fontSize="14px"
-                color={headerBgColor}
-                mb={2}
-              >
-                Real IP:
-              </Text>
-              <Text fontSize="sm">{realIP}</Text>
-            </Flex>
             <SettingsComponent headerBgColor={headerBgColor} />
           </DrawerBody>
         </DrawerContent>
@@ -313,6 +293,23 @@ const IPCard: React.FC<IPCardProps> = ({
                 </Text>
               )}
 
+              {proxyRules.length > 0 && (
+                <Flex justify="space-between" align="center" px={1}>
+                  <Text fontSize="sm" color="gray.400">All Rules</Text>
+                  <HStack spacing={2}>
+                    <Text fontSize="xs" color="gray.500">
+                      {proxyRules.every(r => r.enabled === false) ? 'All disabled' : proxyRules.every(r => r.enabled !== false) ? 'All enabled' : 'Mixed'}
+                    </Text>
+                    <Switch
+                      size="sm"
+                      colorScheme="green"
+                      isChecked={proxyRules.some(r => r.enabled !== false)}
+                      onChange={(e) => handleToggleAllProxyRules(e.target.checked)}
+                    />
+                  </HStack>
+                </Flex>
+              )}
+
               {proxyRules.map((rule) => (
                 <RuleBox
                   key={rule.id}
@@ -320,6 +317,7 @@ const IPCard: React.FC<IPCardProps> = ({
                   headerBgColor={headerBgColor}
                   deleteProxyRule={handleDeleteProxyRule}
                   editProxyRule={handleEditRule}
+                  toggleProxyRule={handleToggleProxyRule}
                   proxyRunning={proxyRunning}
                 />
               ))}

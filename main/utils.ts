@@ -2,6 +2,7 @@
 import { Notification, nativeImage } from "electron";
 import fs from "fs";
 import path from "path";
+import { Socks } from "@anyone-protocol/anyone-client";
 import { state } from "./state";
 
 export function showNotification(title: string, body: string) {
@@ -14,19 +15,41 @@ export interface FingerPrintData {
   coordinates: {longitude: number, latitude: number};
 }
 
-export async function getFingerPrintData(): Promise<Map<string, FingerPrintData> | null> {
+/**
+ * Fetch relay fingerprint → coordinates mapping from the Anyone API.
+ * Pass a Socks client to route through the proxy (useful when the API is blocked
+ * by firewalls/ISPs). Falls back gracefully — globe visualization simply
+ * shows no coordinates when unavailable.
+ */
+export async function getFingerPrintData(socksClient?: Socks): Promise<Map<string, FingerPrintData> | null> {
   const url = "https://api.ec.anyone.tech/fingerprint-map";
-  let lastError: any = null;
+  const TIMEOUT_MS = 5000;
   const MAX_ATTEMPTS = 3;
+  let lastError: any = null;
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        console.error(`Attempt ${attempt}: Error fetching fingerprint data:`, response.statusText);
-        lastError = new Error("Error fetching fingerprint data");
-        continue;
+      let json: any;
+
+      if (socksClient) {
+        const response = await socksClient.get(url, { timeout: TIMEOUT_MS });
+        json = response.data;
+      } else {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+        try {
+          const response = await fetch(url, { signal: controller.signal });
+          if (!response.ok) {
+            const err = new Error(`${response.status} ${response.statusText}`);
+            if (response.status >= 400 && response.status < 500) throw err;
+            lastError = err;
+            continue;
+          }
+          json = await response.json();
+        } finally {
+          clearTimeout(timer);
+        }
       }
-      const json = await response.json();
 
       const fingerprintMap = new Map<string, FingerPrintData>();
       for (const [key, value] of Object.entries(json)) {
@@ -41,17 +64,16 @@ export async function getFingerPrintData(): Promise<Map<string, FingerPrintData>
         }
       }
       return fingerprintMap;
-    } catch (error) {
-      console.error(`Attempt ${attempt}: Error fetching or parsing fingerprint data:`, error);
+    } catch (error: any) {
+      const status = error?.response?.status ?? error?.status;
+      if (status >= 400 && status < 500) throw error;
       lastError = error;
-      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
   throw lastError;
 }
 
 export async function checkIP(useProxy: boolean): Promise<string | null> {
-  console.log("Checking IP idk where from");
   const url = "https://api.ipify.org?format=json";
   const MAX_ATTEMPTS = 3;
 
@@ -63,10 +85,10 @@ export async function checkIP(useProxy: boolean): Promise<string | null> {
           if (response.data && response.data.ip) {
             return response.data.ip;
           }
-        } catch (error) {
-          console.error(`Attempt ${attempt}: Error parsing IP response:`, error);
+        } catch (error: any) {
+          console.error(`Attempt ${attempt}: IP check via proxy failed:`, error.message);
           if (attempt < MAX_ATTEMPTS) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 3000));
             continue;
           }
           return null;
@@ -74,28 +96,25 @@ export async function checkIP(useProxy: boolean): Promise<string | null> {
       } else {
         const response = await fetch(url);
         if (!response.ok) {
-          console.error(`Attempt ${attempt}: Error fetching IP address:`, response.statusText);
-          if (attempt < MAX_ATTEMPTS) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            continue;
-          }
-          return null;
+          console.error(`Attempt ${attempt}: IP fetch failed: ${response.statusText}`);
+          continue;
         }
+
         const data = await response.json();
-        if (data && data.ip) {
+        if (data?.ip) {
           return data.ip;
         }
       }
-    } catch (error) {
-      console.error(`Attempt ${attempt}: Error fetching IP address:`, error);
+    } catch (error: any) {
+      console.error(`Attempt ${attempt}: IP check error:`, error.message);
       if (attempt < MAX_ATTEMPTS) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
       } else {
         return null;
       }
     }
   }
-  
+
   return null;
 }
 
@@ -138,28 +157,6 @@ export async function getGeolocation(ip: string) {
   }
 }
 
-export async function getGeolocationByCoords(lat: number, lon: number) {
-  try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`
-    );
-    if (!response.ok) throw new Error("openstreetmap failed");
-
-    const data = await response.json();
-
-    return {
-      latitude: lat,
-      longitude: lon,
-      city: data.address.city ? data.address.city : data.address.village,
-      region: data.address.state,
-      country: data.address.country,
-      countryCode: data.address.country_code,
-    };
-  } catch (error) {
-    console.error("Error fetching geolocation by coordinates:", error);
-    return null;
-  }
-}
 
 export async function getIcon(iconPath: string) {
   try {

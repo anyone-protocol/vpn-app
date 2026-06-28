@@ -7,12 +7,19 @@ directories:
   output: dist
   buildResources: resources
 files:
+  - "!**/*.{md,MD}"
+  - "!**/*.map"
+  - "!**/examples/**"
+  - "!**/{test,tests,spec,__tests__}/**"
+  - "!**/*.d.ts"
   - from: .
     filter:
       - package.json
       - app
+      - terms-agreement
 asarUnpack:
       - node_modules/@anyone-protocol/anyone-client/bin
+      - terms-agreement
 publish:
   provider: spaces
   name: anyoneDesktop-updates

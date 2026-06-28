@@ -82,8 +82,8 @@ function slerp(p0: THREE.Vector3, p1: THREE.Vector3, t: number): THREE.Vector3 {
   p0.normalize();
   p1.normalize();
 
-  // Calculate the angle between the two vectors
-  const omega = Math.acos(p0.dot(p1));
+  // Clamp to [-1, 1] to guard against floating-point values outside acos domain
+  const omega = Math.acos(Math.max(-1, Math.min(1, p0.dot(p1))));
 
   // If the vectors are very close or identical, just return one of them
   if (omega < 1e-6) {
@@ -201,8 +201,13 @@ const Bridge = ({
 }) => {
   const numPoints = 50;
 
+  const validCoords =
+    isFinite(start.lat) && isFinite(start.lon) &&
+    isFinite(end.lat)   && isFinite(end.lon);
+
   // Memoize the bridge path calculation
   const pathPoints = useMemo(() => {
+    if (!validCoords) return [];
     const startPos = latLongToCartesianPoints(start.lat, start.lon, radius);
     const endPos = latLongToCartesianPoints(end.lat, end.lon, radius);
     const points: THREE.Vector3[] = [];
@@ -219,11 +224,15 @@ const Bridge = ({
         .normalize()
         .multiplyScalar(radius + heightAdjustment);
 
-      points.push(adjustedPoint);
+      if (isFinite(adjustedPoint.x) && isFinite(adjustedPoint.y) && isFinite(adjustedPoint.z)) {
+        points.push(adjustedPoint);
+      }
     }
 
     return points;
   }, [start, end, radius, amplitude]); // Only recalculate when these dependencies change
+
+  if (!validCoords || pathPoints.length < 2) return null;
 
   return (
     <>
@@ -362,24 +371,20 @@ const Globe = ({ points, orbitRef }: { points: Location[]; orbitRef: any }) => {
   }, [points]);
 
   useEffect(() => {
-    if (points.length === 3) {
-      const bridges = [
-        <Bridge
-          start={{ lat: points[0].lat, lon: points[0].lon }}
-          end={{ lat: points[1].lat, lon: points[1].lon }}
-          radius={2}
-          amplitude={0.2}
-          key={`bridge-${points[0].name}-${points[1].name}`}
-        />,
-        <Bridge
-          start={{ lat: points[1].lat, lon: points[1].lon }}
-          end={{ lat: points[2].lat, lon: points[2].lon }}
-          radius={2}
-          amplitude={0.2}
-          key={`bridge-${points[1].name}-${points[2].name}`}
-        />,
-      ];
-      setBridges(bridges);
+    if (points.length >= 2) {
+      const newBridges: JSX.Element[] = [];
+      for (let i = 0; i < points.length - 1; i++) {
+        newBridges.push(
+          <Bridge
+            start={{ lat: points[i].lat, lon: points[i].lon }}
+            end={{ lat: points[i + 1].lat, lon: points[i + 1].lon }}
+            radius={2}
+            amplitude={0.2}
+            key={`bridge-${i}-${points[i].name}-${points[i + 1].name}`}
+          />
+        );
+      }
+      setBridges(newBridges);
     } else {
       setBridges([]);
     }
@@ -402,6 +407,8 @@ export default function GlobeComponent({
   rotating,
   enableOrbitControls,
   initialZoom,
+  circuitHopCountries,
+  circuitHopCoordinates,
 }: {
   realLocation: any;
   proxyLocation: any;
@@ -409,17 +416,45 @@ export default function GlobeComponent({
   rotating: boolean;
   enableOrbitControls: boolean;
   initialZoom: number;
+  circuitHopCountries?: string[];
+  circuitHopCoordinates?: Array<{ latitude: number; longitude: number } | null>;
 }) {
   const [points, setPoints] = useState<Location[]>([]);
 
   useEffect(() => {
-    if (realLocation && proxyLocation && relayLocation) {
-      const newPoints = [
-        {
+    const liveHops = circuitHopCoordinates?.filter(Boolean) ?? [];
+    const hasLiveCircuit = liveHops.length > 0;
+
+    if (hasLiveCircuit) {
+      const newPoints: Location[] = [];
+      // Include real location as the origin point only when available
+      if (realLocation && isFinite(realLocation.latitude) && isFinite(realLocation.longitude)) {
+        newPoints.push({
           lat: realLocation.latitude,
           lon: realLocation.longitude,
           name: realLocation.countryCode?.toUpperCase(),
-        },
+        });
+      }
+      circuitHopCoordinates!.forEach((coord, i) => {
+        if (coord && isFinite(coord.latitude) && isFinite(coord.longitude)) {
+          newPoints.push({
+            lat: coord.latitude,
+            lon: coord.longitude,
+            name: circuitHopCountries?.[i] ?? '??',
+          });
+        }
+      });
+      setPoints(newPoints);
+    } else if (proxyLocation && relayLocation) {
+      const pts: Location[] = [];
+      if (realLocation) {
+        pts.push({
+          lat: realLocation.latitude,
+          lon: realLocation.longitude,
+          name: realLocation.countryCode?.toUpperCase(),
+        });
+      }
+      pts.push(
         {
           lat: relayLocation.latitude,
           lon: relayLocation.longitude,
@@ -429,16 +464,13 @@ export default function GlobeComponent({
           lat: proxyLocation.latitude,
           lon: proxyLocation.longitude,
           name: proxyLocation.countryCode?.toUpperCase(),
-        },
-      ];
-
-      if (newPoints != points) {
-        setPoints(newPoints);
-      }
+        }
+      );
+      setPoints(pts);
     } else {
       setPoints([]);
     }
-  }, [realLocation, proxyLocation, relayLocation]);
+  }, [realLocation, proxyLocation, relayLocation, circuitHopCountries, circuitHopCoordinates]);
 
   const orbitControlsRef = useRef<any>(null);
 

@@ -37,7 +37,9 @@ export function createMainWindow(): BrowserWindow {
   } else {
     const port = process.argv[2];
     mainWindow.loadURL(`http://localhost:${port}/`);
-    mainWindow.webContents.openDevTools();
+    if (process.env.DEVTOOLS === "true") {
+      mainWindow.webContents.openDevTools();
+    }
   }
 
   mainWindow.webContents.on("before-input-event", (event, input) => {
@@ -54,13 +56,17 @@ export function createMainWindow(): BrowserWindow {
   });
 
   mainWindow.on("close", (event) => {
-    event.preventDefault();
-    if (platform === "darwin") {
-      app.dock.hide();
+    if (!state.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+      if (platform === "darwin") {
+        app.dock.hide();
+      }
     }
-    mainWindow.hide();
-    state.tray.app.quit();
-    state.tray.app.exit();
+  });
+
+  mainWindow.on("destroyed", () => {
+    state.mainWindow = null;
   });
 
   mainWindow.on("system-context-menu", (event) => {
@@ -164,7 +170,7 @@ export function expandMainWindow() {
 
     const newWidth = showAnimations
       ? Math.max(Math.round(width * 0.8), 1024)
-      : Math.max(Math.round(width * 0.5), 400);
+      : Math.max(Math.round(width * 0.55), 840);
     const newHeight = showAnimations
       ? Math.max(Math.round(height * 0.8), 720)
       : Math.max(Math.round(height * 0.8), 700);
